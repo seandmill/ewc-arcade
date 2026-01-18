@@ -2,7 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useArcade } from '../../context/ArcadeContext';
 import { useSound } from '../../hooks/useSound';
 import SkateCanvas from './SkateCanvas';
@@ -27,35 +27,57 @@ const MiniSkateGame: React.FC = () => {
   const [comboCount, setComboCount] = useState(0);
   const [lastTrick, setLastTrick] = useState<string | null>(null);
 
+  // Refs to avoid stale closures in callbacks passed to R3F components
+  const comboCountRef = useRef(comboCount);
+  const trickCountRef = useRef(0);
+  const bestComboRef = useRef(state.skateProgress.bestCombo);
+  const prevGroundedRef = useRef(true);
+
+  // Keep refs in sync with state
+  useEffect(() => {
+    comboCountRef.current = comboCount;
+  }, [comboCount]);
+
+  useEffect(() => {
+    trickCountRef.current = state.skateProgress.totalTricks;
+    bestComboRef.current = state.skateProgress.bestCombo;
+  }, [state.skateProgress.totalTricks, state.skateProgress.bestCombo]);
+
   // Controls
   const { input, updateJoystick, setTouchButton } = useSkateControls();
 
-  // Handle trick performed
+  // Handle trick performed - stable callback using refs to avoid stale closures
   const handleTrickPerformed = useCallback((trickName: string) => {
     playCorrect();
     setTrickCount((prev) => prev + 1);
     setComboCount((prev) => prev + 1);
     setLastTrick(trickName);
 
-    // Update global progress
-    updateSkateProgress({
-      totalTricks: state.skateProgress.totalTricks + 1,
-      bestCombo: Math.max(state.skateProgress.bestCombo, comboCount + 1),
-    });
-  }, [playCorrect, updateSkateProgress, state.skateProgress, comboCount]);
+    // Use refs to get current values (avoids stale closure)
+    const newTrickCount = trickCountRef.current + 1;
+    const newCombo = comboCountRef.current + 1;
+    const newBestCombo = Math.max(bestComboRef.current, newCombo);
 
-  // Handle skater state update
+    updateSkateProgress({
+      totalTricks: newTrickCount,
+      bestCombo: newBestCombo,
+    });
+  }, [playCorrect, updateSkateProgress]);
+
+  // Handle skater state update - stable callback using refs
   const handleSkaterUpdate = useCallback((newState: SkaterState) => {
     setSkaterState(newState);
 
     // Reset combo when landing (grounded and was airborne)
-    if (newState.isGrounded && skaterState && !skaterState.isGrounded) {
+    // Use ref to track previous grounded state to avoid stale closure
+    if (newState.isGrounded && !prevGroundedRef.current) {
       // Small delay to allow combo to register
       setTimeout(() => {
         setComboCount(0);
       }, 100);
     }
-  }, [skaterState]);
+    prevGroundedRef.current = newState.isGrounded;
+  }, []);
 
   // Handle joystick movement from UI
   const handleJoystickMove = useCallback((x: number, y: number, active: boolean) => {

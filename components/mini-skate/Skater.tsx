@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import React, { useRef, useEffect, useMemo } from 'react';
-import { useGLTF, useAnimations } from '@react-three/drei';
+import { useGLTF, useAnimations, useTexture } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { ASSETS, PHYSICS, TRICKS } from './skateConstants';
@@ -43,31 +43,50 @@ const Skater: React.FC<SkaterProps> = ({
     currentTrick: null,
   });
 
+  // CRITICAL: Use a ref to track input so useFrame always sees latest values
+  // React state updates don't trigger re-renders inside useFrame's closure
+  const inputRef = useRef<InputState>(input);
+  useEffect(() => {
+    inputRef.current = input;
+  }, [input]);
+
   // Track animation state
   const currentAnimRef = useRef<string>('idle');
   const lastTrickRef = useRef<number>(-1);
+
+  // Track previous input state for edge detection (prevents auto-jumping when holding)
+  const prevJumpRef = useRef(false);
+
+  // Throttle state updates to reduce React re-renders (update at ~20fps instead of 60fps)
+  const lastUpdateTimeRef = useRef(0);
+  const UPDATE_INTERVAL = 50; // ms between React state updates
 
   // Load character model
   const characterPath = character === 'boy' ? ASSETS.characters.boy : ASSETS.characters.girl;
   const { scene, animations } = useGLTF(characterPath);
   const { actions, names } = useAnimations(animations, groupRef);
 
+  // Load the shared colormap texture used by Kenney assets
+  const colormap = useTexture('/assets/mini-skate/colormap.png');
+  colormap.flipY = false;
+  colormap.colorSpace = THREE.SRGBColorSpace;
+
   // Clone scene for this instance
   const clonedScene = useMemo(() => {
     const clone = scene.clone(true);
     clone.traverse((child) => {
       if (child instanceof THREE.Mesh) {
+        const material = (child.material as THREE.MeshStandardMaterial).clone();
+        material.map = colormap;
+        material.needsUpdate = true;
+        child.material = material;
         child.castShadow = true;
         child.receiveShadow = true;
       }
     });
     return clone;
-  }, [scene]);
+  }, [scene, colormap]);
 
-  // Log available animations on mount (for debugging)
-  useEffect(() => {
-    console.log('Available animations:', names);
-  }, [names]);
 
   // Find best matching animation name
   const findAnimation = (searchTerms: string[]): string | null => {
@@ -135,6 +154,8 @@ const Skater: React.FC<SkaterProps> = ({
   useFrame((_, delta) => {
     if (!groupRef.current) return;
 
+    // Read input from ref to get latest values (avoids stale closure)
+    const currentInput = inputRef.current;
     const state = stateRef.current;
     const speed = state.velocity.length();
 
@@ -146,7 +167,7 @@ const Skater: React.FC<SkaterProps> = ({
     // Movement input
     if (state.isGrounded) {
       // Forward/backward
-      if (input.forward) {
+      if (currentInput.forward) {
         const forward = new THREE.Vector3(
           Math.sin(state.rotation),
           0,
@@ -155,20 +176,21 @@ const Skater: React.FC<SkaterProps> = ({
         state.velocity.add(forward.multiplyScalar(PHYSICS.PUSH_ACCEL * delta));
       }
 
-      if (input.backward) {
+      if (currentInput.backward) {
         state.velocity.multiplyScalar(PHYSICS.BRAKE_FRICTION);
       }
 
       // Turning
-      if (input.turnLeft) {
+      if (currentInput.turnLeft) {
         state.rotation += PHYSICS.TURN_SPEED * delta;
       }
-      if (input.turnRight) {
+      if (currentInput.turnRight) {
         state.rotation -= PHYSICS.TURN_SPEED * delta;
       }
 
-      // Jump
-      if (input.jump && state.isGrounded) {
+      // Jump - use edge detection to prevent auto-jumping when holding button
+      const jumpPressed = currentInput.jump && !prevJumpRef.current;
+      if (jumpPressed && state.isGrounded) {
         state.verticalVelocity = PHYSICS.JUMP_FORCE;
         state.isGrounded = false;
         playAnimation('ollie', false);
@@ -178,17 +200,17 @@ const Skater: React.FC<SkaterProps> = ({
       state.velocity.multiplyScalar(PHYSICS.FRICTION);
     } else {
       // Air control (reduced)
-      if (input.turnLeft) {
+      if (currentInput.turnLeft) {
         state.rotation += PHYSICS.TURN_SPEED * PHYSICS.AIR_CONTROL * delta;
       }
-      if (input.turnRight) {
+      if (currentInput.turnRight) {
         state.rotation -= PHYSICS.TURN_SPEED * PHYSICS.AIR_CONTROL * delta;
       }
 
       // Check for trick input while airborne
-      const trickIndex = input.trick1 ? 0 : input.trick2 ? 1 : input.trick3 ? 2 : input.trick4 ? 3 : -1;
-      if (trickIndex >= 0 && trickIndex !== lastTrickRef.current) {
-        const trick = TRICKS[trickIndex];
+      const trickIndex = currentInput.trick1 ? 0 : currentInput.trick2 ? 1 : currentInput.trick3 ? 2 : currentInput.trick4 ? 3 : -1;
+      if (trickIndex >= 0 && trickIndex < TRICKS.length && trickIndex !== lastTrickRef.current) {
+        const trick = TRICKS[trickIndex as 0 | 1 | 2 | 3];
         state.currentTrick = trick.name;
         lastTrickRef.current = trickIndex;
         playAnimation(trick.id, false);
@@ -224,11 +246,11 @@ const Skater: React.FC<SkaterProps> = ({
     // Update animation based on state
     if (state.isGrounded && !state.isGrinding) {
       if (speed > 0.5) {
-        if (input.forward) {
+        if (currentInput.forward) {
           playAnimation('push');
-        } else if (input.turnLeft) {
+        } else if (currentInput.turnLeft) {
           playAnimation('turnLeft');
-        } else if (input.turnRight) {
+        } else if (currentInput.turnRight) {
           playAnimation('turnRight');
         } else {
           playAnimation('coast');
@@ -242,8 +264,20 @@ const Skater: React.FC<SkaterProps> = ({
     groupRef.current.position.copy(state.position);
     groupRef.current.rotation.y = state.rotation;
 
-    // Notify parent of state
-    onStateUpdate({ ...state });
+    // Update previous input state for edge detection
+    prevJumpRef.current = currentInput.jump;
+
+    // Throttle React state updates to reduce re-renders (~20fps instead of 60fps)
+    const now = performance.now();
+    if (now - lastUpdateTimeRef.current >= UPDATE_INTERVAL) {
+      lastUpdateTimeRef.current = now;
+      // Notify parent of state - clone Vector3 objects to avoid reference issues
+      onStateUpdate({
+        ...state,
+        position: state.position.clone(),
+        velocity: state.velocity.clone(),
+      });
+    }
   });
 
   return (

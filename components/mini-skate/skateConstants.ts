@@ -83,7 +83,8 @@ export const ASSET_MAP: Record<string, string> = {
 // Generate floor grid
 function generateFloorGrid(width: number, depth: number): ParkElement[] {
   const elements: ParkElement[] = [];
-  const floorSize = 2; // Each floor tile is 2 units
+  // Kenney floor tiles are 1 unit in size
+  const floorSize = 1;
   const offsetX = (width * floorSize) / 2 - floorSize / 2;
   const offsetZ = (depth * floorSize) / 2 - floorSize / 2;
 
@@ -101,8 +102,8 @@ function generateFloorGrid(width: number, depth: number): ParkElement[] {
 
 // Skatepark layout
 export const SKATEPARK_LAYOUT: ParkElement[] = [
-  // Floor grid (10x10)
-  ...generateFloorGrid(10, 10),
+  // Floor grid (20x20 tiles at 1 unit each covers ±10 unit area)
+  ...generateFloorGrid(20, 20),
 
   // Half-pipes at north and south
   { type: 'half-pipe', position: [0, 0, -8], rotation: 0 },

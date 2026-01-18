@@ -24,6 +24,8 @@ const VirtualJoystick: React.FC<{
   const [knobPosition, setKnobPosition] = useState({ x: 0, y: 0 });
   const [isActive, setIsActive] = useState(false);
   const touchIdRef = useRef<number | null>(null);
+  // Use ref for isActive to avoid stale closure in handleMove
+  const isActiveRef = useRef(false);
 
   const handleStart = useCallback((clientX: number, clientY: number, touchId?: number) => {
     if (!containerRef.current) return;
@@ -33,6 +35,7 @@ const VirtualJoystick: React.FC<{
 
     touchIdRef.current = touchId ?? null;
     setIsActive(true);
+    isActiveRef.current = true;
 
     // Calculate offset from center
     const maxRadius = rect.width / 2 - 20;
@@ -51,7 +54,8 @@ const VirtualJoystick: React.FC<{
   }, [onMove]);
 
   const handleMove = useCallback((clientX: number, clientY: number) => {
-    if (!containerRef.current || !isActive) return;
+    // Use ref to check active state to avoid stale closure
+    if (!containerRef.current || !isActiveRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
     const centerX = rect.left + rect.width / 2;
     const centerY = rect.top + rect.height / 2;
@@ -68,10 +72,11 @@ const VirtualJoystick: React.FC<{
 
     setKnobPosition({ x: dx, y: dy });
     onMove(dx / maxRadius, dy / maxRadius, true);
-  }, [isActive, onMove]);
+  }, [onMove]);
 
   const handleEnd = useCallback(() => {
     setIsActive(false);
+    isActiveRef.current = false;
     setKnobPosition({ x: 0, y: 0 });
     touchIdRef.current = null;
     onMove(0, 0, false);
@@ -100,6 +105,12 @@ const VirtualJoystick: React.FC<{
     }
   }, [handleEnd]);
 
+  // Handle touchcancel (e.g., incoming call, system gesture)
+  const onTouchCancel = useCallback((e: React.TouchEvent) => {
+    e.preventDefault();
+    handleEnd();
+  }, [handleEnd]);
+
   return (
     <div
       ref={containerRef}
@@ -107,8 +118,9 @@ const VirtualJoystick: React.FC<{
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
+      onTouchCancel={onTouchCancel}
       onMouseDown={(e) => handleStart(e.clientX, e.clientY)}
-      onMouseMove={(e) => isActive && handleMove(e.clientX, e.clientY)}
+      onMouseMove={(e) => handleMove(e.clientX, e.clientY)}
       onMouseUp={handleEnd}
       onMouseLeave={handleEnd}
     >
@@ -136,14 +148,19 @@ const TouchButton: React.FC<{
   size?: 'normal' | 'large';
 }> = ({ label, subLabel, color, onPress, onRelease, size = 'normal' }) => {
   const [isPressed, setIsPressed] = useState(false);
+  // Use ref to track pressed state for stale closure in mouse handlers
+  const isPressedRef = useRef(false);
 
   const handleStart = useCallback(() => {
     setIsPressed(true);
+    isPressedRef.current = true;
     onPress();
   }, [onPress]);
 
   const handleEnd = useCallback(() => {
+    if (!isPressedRef.current) return; // Prevent double-release
     setIsPressed(false);
+    isPressedRef.current = false;
     onRelease();
   }, [onRelease]);
 
@@ -157,9 +174,10 @@ const TouchButton: React.FC<{
       style={{ backgroundColor: color }}
       onTouchStart={(e) => { e.preventDefault(); handleStart(); }}
       onTouchEnd={(e) => { e.preventDefault(); handleEnd(); }}
+      onTouchCancel={(e) => { e.preventDefault(); handleEnd(); }}
       onMouseDown={handleStart}
       onMouseUp={handleEnd}
-      onMouseLeave={() => isPressed && handleEnd()}
+      onMouseLeave={handleEnd}
     >
       <span className="text-sm">{label}</span>
       {subLabel && <span className="text-[10px] opacity-70">{subLabel}</span>}

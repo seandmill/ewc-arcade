@@ -11,16 +11,20 @@ import Skater, { SkaterState } from './Skater';
 import { InputState } from './useSkateControls';
 
 interface FollowCameraProps {
-  targetPosition: THREE.Vector3;
-  targetRotation: number;
+  // Pass the ref so we can read current values each frame
+  skaterStateRef: React.RefObject<SkaterState>;
 }
 
 // Follow camera that smoothly tracks the skater
-const FollowCamera: React.FC<FollowCameraProps> = ({ targetPosition, targetRotation }) => {
+const FollowCamera: React.FC<FollowCameraProps> = ({ skaterStateRef }) => {
   const cameraRef = useRef<THREE.PerspectiveCamera>(null);
 
   useFrame(() => {
-    if (!cameraRef.current) return;
+    if (!cameraRef.current || !skaterStateRef.current) return;
+
+    // Read current skater state each frame (not captured at render time)
+    const targetPosition = skaterStateRef.current.position;
+    const targetRotation = skaterStateRef.current.rotation;
 
     // Camera offset: behind and above the skater
     const offsetDistance = 6;
@@ -90,11 +94,8 @@ const SkateCanvas: React.FC<SkateCanvasProps> = ({
 
   return (
     <Canvas shadows>
-      {/* Camera */}
-      <FollowCamera
-        targetPosition={skaterStateRef.current.position}
-        targetRotation={skaterStateRef.current.rotation}
-      />
+      {/* Camera - pass ref so it reads current values each frame */}
+      <FollowCamera skaterStateRef={skaterStateRef} />
 
       {/* Lighting */}
       <ambientLight intensity={0.5} />
