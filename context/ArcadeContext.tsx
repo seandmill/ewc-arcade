@@ -2,7 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
-import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useReducer, useEffect, ReactNode, useCallback } from 'react';
 import { DEFAULT_CHARACTER_ID, DEFAULT_PLAYER_NAME, MAX_NAME_LENGTH } from '../constants';
 
 // Game types
@@ -228,54 +228,68 @@ export function ArcadeProvider({ children }: { children: ReactNode }) {
     }
   }, [state]);
 
-  // Helper functions
-  const setActiveGame = (game: GameType) => {
+  // Helper functions - memoized to prevent re-render cascades
+  const setActiveGame = useCallback((game: GameType) => {
     dispatch({ type: 'SET_ACTIVE_GAME', payload: game });
-  };
+  }, []);
 
-  const updatePlayerProfile = (profile: Partial<PlayerProfile>) => {
+  const updatePlayerProfile = useCallback((profile: Partial<PlayerProfile>) => {
     dispatch({ type: 'UPDATE_PLAYER_PROFILE', payload: profile });
-  };
+  }, []);
 
-  const completeMathLevel = (level: number, stars: number, coins: number) => {
+  const completeMathLevel = useCallback((level: number, stars: number, coins: number) => {
     dispatch({ type: 'COMPLETE_MATH_LEVEL', payload: { level, stars, coins } });
-  };
+  }, []);
 
-  const updateMathProgress = (progress: Partial<MathProgress>) => {
+  const updateMathProgress = useCallback((progress: Partial<MathProgress>) => {
     dispatch({ type: 'UPDATE_MATH_PROGRESS', payload: progress });
-  };
+  }, []);
 
-  const updateCityProgress = (progress: Partial<CityProgress>) => {
+  const updateCityProgress = useCallback((progress: Partial<CityProgress>) => {
     dispatch({ type: 'UPDATE_CITY_PROGRESS', payload: progress });
-  };
+  }, []);
 
-  const updateSkateProgress = (progress: Partial<SkateProgress>) => {
+  const updateSkateProgress = useCallback((progress: Partial<SkateProgress>) => {
     dispatch({ type: 'UPDATE_SKATE_PROGRESS', payload: progress });
-  };
+  }, []);
 
-  const addAchievement = (achievement: string) => {
+  const addAchievement = useCallback((achievement: string) => {
     dispatch({ type: 'ADD_ACHIEVEMENT', payload: achievement });
-  };
+  }, []);
 
-  const getTotalStars = () => {
+  const getTotalStars = useCallback(() => {
     return Object.values(state.mathProgress.levelStars).reduce((sum, s) => sum + s, 0);
-  };
+  }, [state.mathProgress.levelStars]);
+
+  // Memoize context value to prevent unnecessary consumer re-renders
+  const contextValue = React.useMemo(
+    () => ({
+      state,
+      dispatch,
+      setActiveGame,
+      updatePlayerProfile,
+      completeMathLevel,
+      updateMathProgress,
+      updateCityProgress,
+      updateSkateProgress,
+      addAchievement,
+      getTotalStars,
+    }),
+    [
+      state,
+      setActiveGame,
+      updatePlayerProfile,
+      completeMathLevel,
+      updateMathProgress,
+      updateCityProgress,
+      updateSkateProgress,
+      addAchievement,
+      getTotalStars,
+    ]
+  );
 
   return (
-    <ArcadeContext.Provider
-      value={{
-        state,
-        dispatch,
-        setActiveGame,
-        updatePlayerProfile,
-        completeMathLevel,
-        updateMathProgress,
-        updateCityProgress,
-        updateSkateProgress,
-        addAchievement,
-        getTotalStars,
-      }}
-    >
+    <ArcadeContext.Provider value={contextValue}>
       {children}
     </ArcadeContext.Provider>
   );

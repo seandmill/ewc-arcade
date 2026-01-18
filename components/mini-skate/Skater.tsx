@@ -61,6 +61,7 @@ const Skater: React.FC<SkaterProps> = ({
   // Throttle state updates to reduce React re-renders (update at ~20fps instead of 60fps)
   const lastUpdateTimeRef = useRef(0);
   const UPDATE_INTERVAL = 50; // ms between React state updates
+  const frameCountRef = useRef(0); // For debug logging
 
   // Load character model
   const characterPath = character === 'boy' ? ASSETS.characters.boy : ASSETS.characters.girl;
@@ -272,6 +273,13 @@ const Skater: React.FC<SkaterProps> = ({
     // Apply to mesh
     groupRef.current.position.copy(state.position);
     groupRef.current.rotation.y = state.rotation;
+
+    // DEBUG: Log every 60 frames to verify mesh position is updating
+    if (frameCountRef.current % 60 === 0) {
+      console.log('[Skater] State position:', state.position.x.toFixed(2), state.position.y.toFixed(2), state.position.z.toFixed(2),
+        'Mesh position:', groupRef.current.position.x.toFixed(2), groupRef.current.position.y.toFixed(2), groupRef.current.position.z.toFixed(2));
+    }
+    frameCountRef.current++;
 
     // Update previous input state for edge detection
     prevJumpRef.current = currentInput.jump;
