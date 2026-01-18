@@ -4,16 +4,17 @@
  */
 
 // Physics constants for arcade-style skating
+// Tuned for smooth, controllable movement (not too fast!)
 export const PHYSICS = {
   GRAVITY: 15,
-  PUSH_ACCEL: 12,
-  MAX_SPEED: 8,
-  TURN_SPEED: 3.5,
-  FRICTION: 0.98,
-  BRAKE_FRICTION: 0.92,
-  JUMP_FORCE: 6,
+  PUSH_ACCEL: 0.5,      // Reduced from 12 - much more controllable
+  MAX_SPEED: 0.2,       // Reduced from 8 - prevents zooming off screen
+  TURN_SPEED: 1,      // Slightly reduced from 3.5
+  FRICTION: 0.95,       // More friction for quicker stops
+  BRAKE_FRICTION: 0.85, // Stronger braking
+  JUMP_FORCE: 5,        // Slightly reduced
   AIR_CONTROL: 0.3,
-  GRIND_SPEED: 5,
+  GRIND_SPEED: 0.3,     // Match the new slower speed
   RAMP_BOOST: 1.3,
 } as const;
 

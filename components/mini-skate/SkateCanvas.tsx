@@ -2,28 +2,26 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
-import React, { useRef, useCallback } from 'react';
+import React, { useRef, Suspense } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { Environment } from '@react-three/drei';
 import * as THREE from 'three';
-import Skatepark from './Skatepark';
-import Skater, { SkaterState } from './Skater';
 import { InputState } from './useSkateControls';
+import Skater, { SkaterState } from './Skater';
+import Skatepark from './Skatepark';
 
-// Module-level store for camera target - shared between Skater and FollowCamera
-// This avoids React/R3F reconciler boundary issues with refs
+// Module-level store for camera target - avoids React/R3F reconciler issues
+// The Skater component writes to this every frame, and FollowCamera reads from it.
+// This bypasses React's reconciler entirely, preventing re-render cascades.
 export const cameraTarget = {
   position: new THREE.Vector3(0, 0, 0),
   rotation: 0,
 };
 
-// Follow camera that smoothly tracks the skater using direct camera access
+// Follow camera that smoothly tracks the target using direct camera access
 const FollowCamera: React.FC = () => {
   const { camera } = useThree();
-  const frameCountRef = useRef(0);
   const initializedRef = useRef(false);
 
-  // Initialize camera position on first frame
   useFrame(() => {
     if (!initializedRef.current) {
       camera.position.set(0, 5, -8);
@@ -34,18 +32,9 @@ const FollowCamera: React.FC = () => {
     const targetPosition = cameraTarget.position;
     const targetRotation = cameraTarget.rotation;
 
-    // DEBUG: Log every 60 frames to verify camera is updating
-    frameCountRef.current++;
-    if (frameCountRef.current % 60 === 0) {
-      console.log('[FollowCamera] Target:', targetPosition.x.toFixed(2), targetPosition.y.toFixed(2), targetPosition.z.toFixed(2),
-        'Camera:', camera.position.x.toFixed(2), camera.position.y.toFixed(2), camera.position.z.toFixed(2));
-    }
-
-    // Camera offset: behind and above the skater
+    // Camera offset: behind and above
     const offsetDistance = 6;
     const offsetHeight = 3;
-
-    // Calculate camera position based on skater rotation
     const offsetX = -Math.sin(targetRotation) * offsetDistance;
     const offsetZ = -Math.cos(targetRotation) * offsetDistance;
 
@@ -55,22 +44,21 @@ const FollowCamera: React.FC = () => {
       targetPosition.z + offsetZ
     );
 
-    // Smooth interpolation
-    camera.position.lerp(desiredPosition, 0.08);
+    // Smooth interpolation - lower value = smoother but laggier
+    // 0.05 reduces jitter from small position fluctuations
+    camera.position.lerp(desiredPosition, 0.06);
 
-    // Look at skater (slightly above ground level)
+    // Look at target
     const lookTarget = new THREE.Vector3(
       targetPosition.x,
       targetPosition.y + 0.5,
       targetPosition.z
     );
     camera.lookAt(lookTarget);
-
-    // Ensure the camera matrix is updated
     camera.updateProjectionMatrix();
   });
 
-  return null;  // No component needed - we manipulate the default camera directly
+  return null;
 };
 
 interface SkateCanvasProps {
@@ -81,60 +69,51 @@ interface SkateCanvasProps {
 }
 
 const SkateCanvas: React.FC<SkateCanvasProps> = ({
-  character,
   input,
+  character,
   onSkaterUpdate,
   onTrickPerformed,
 }) => {
-  // Handler for throttled state updates (UI uses this)
-  const handleStateUpdate = useCallback((state: SkaterState) => {
-    onSkaterUpdate(state);
-  }, [onSkaterUpdate]);
-
   return (
-    <Canvas shadows>
-      {/* Camera - reads from module-level cameraTarget updated every frame by Skater */}
+    <Canvas shadows camera={{ position: [0, 5, -8], fov: 60 }}>
+      {/* Camera following */}
       <FollowCamera />
 
       {/* Lighting */}
-      <ambientLight intensity={0.5} />
+      <ambientLight intensity={0.6} />
       <directionalLight
         position={[10, 20, 10]}
-        intensity={1.5}
+        intensity={1.2}
         castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
-        shadow-camera-far={50}
-        shadow-camera-left={-20}
-        shadow-camera-right={20}
-        shadow-camera-top={20}
-        shadow-camera-bottom={-20}
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
       />
 
-      {/* Sky/Environment */}
-      <Environment preset="sunset" />
+      {/* Sky */}
       <color attach="background" args={['#87CEEB']} />
 
-      {/* Ground plane for shadows */}
-      <mesh
-        rotation={[-Math.PI / 2, 0, 0]}
-        position={[0, -0.01, 0]}
-        receiveShadow
-      >
-        <planeGeometry args={[50, 50]} />
-        <shadowMaterial opacity={0.3} />
-      </mesh>
+      {/* NOTE: No simple floor here - Skatepark provides the floor tiles.
+          Having both at Y=0 causes z-fighting (VCR static effect). */}
 
-      {/* Skatepark */}
-      <Skatepark />
+      {/* Skatepark obstacles and floor */}
+      <Suspense fallback={null}>
+        <Skatepark />
+      </Suspense>
 
-      {/* Skater */}
-      <Skater
-        character={character}
-        input={input}
-        onStateUpdate={handleStateUpdate}
-        onTrickPerformed={onTrickPerformed}
-      />
+      {/* Player character with physics and animations */}
+      <Suspense fallback={
+        <mesh position={[0, 0.5, 0]}>
+          <capsuleGeometry args={[0.25, 0.6, 8, 16]} />
+          <meshStandardMaterial color="#888888" />
+        </mesh>
+      }>
+        <Skater
+          character={character}
+          input={input}
+          onStateUpdate={onSkaterUpdate}
+          onTrickPerformed={onTrickPerformed}
+        />
+      </Suspense>
     </Canvas>
   );
 };

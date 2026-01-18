@@ -73,20 +73,22 @@ const Skater: React.FC<SkaterProps> = ({
   colormap.flipY = false;
   colormap.colorSpace = THREE.SRGBColorSpace;
 
-  // Clone scene for this instance
-  const clonedScene = useMemo(() => {
-    const clone = scene.clone(true);
-    clone.traverse((child) => {
+  // Apply texture directly to scene materials (no cloning!)
+  // CRITICAL: scene.clone(true) breaks R3F's object tracking - the cloned
+  // objects are not properly registered in the reconciler, causing the mesh
+  // to appear frozen while physics continue updating the group position.
+  useMemo(() => {
+    scene.traverse((child) => {
       if (child instanceof THREE.Mesh) {
-        const material = (child.material as THREE.MeshStandardMaterial).clone();
-        material.map = colormap;
-        material.needsUpdate = true;
-        child.material = material;
+        const mat = child.material as THREE.MeshStandardMaterial;
+        if (mat) {
+          mat.map = colormap;
+          mat.needsUpdate = true;
+        }
         child.castShadow = true;
         child.receiveShadow = true;
       }
     });
-    return clone;
   }, [scene, colormap]);
 
 
@@ -303,7 +305,8 @@ const Skater: React.FC<SkaterProps> = ({
 
   return (
     <group ref={groupRef}>
-      <primitive object={clonedScene} scale={1} />
+      {/* Rotate model 90° so character faces sideways (skating stance, not running) */}
+      <primitive object={scene} scale={1} rotation={[0, Math.PI / 2, 0]} />
     </group>
   );
 };
