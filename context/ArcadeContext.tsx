@@ -6,7 +6,7 @@ import React, { createContext, useContext, useReducer, useEffect, ReactNode } fr
 import { DEFAULT_CHARACTER_ID, DEFAULT_PLAYER_NAME, MAX_NAME_LENGTH } from '../constants';
 
 // Game types
-export type GameType = 'city-builder' | 'math-adventure';
+export type GameType = 'city-builder' | 'math-adventure' | 'mini-skate';
 
 // Player profile
 export interface PlayerProfile {
@@ -31,6 +31,14 @@ export interface CityProgress {
   daysPlayed: number;
 }
 
+// Mini Skate progress
+export interface SkateProgress {
+  totalTricks: number;
+  bestCombo: number;
+  sessionsPlayed: number;
+  favoriteCharacter: 'boy' | 'girl' | null;
+}
+
 // Full arcade state
 export interface ArcadeState {
   version: number;
@@ -38,6 +46,7 @@ export interface ArcadeState {
   playerProfile: PlayerProfile;
   mathProgress: MathProgress;
   cityProgress: CityProgress;
+  skateProgress: SkateProgress;
 }
 
 // Initial state
@@ -61,12 +70,20 @@ const initialCityProgress: CityProgress = {
   daysPlayed: 0,
 };
 
+const initialSkateProgress: SkateProgress = {
+  totalTricks: 0,
+  bestCombo: 0,
+  sessionsPlayed: 0,
+  favoriteCharacter: null,
+};
+
 const initialState: ArcadeState = {
   version: 1,
   activeGame: 'city-builder',
   playerProfile: initialPlayerProfile,
   mathProgress: initialMathProgress,
   cityProgress: initialCityProgress,
+  skateProgress: initialSkateProgress,
 };
 
 // Actions
@@ -75,6 +92,7 @@ type ArcadeAction =
   | { type: 'UPDATE_PLAYER_PROFILE'; payload: Partial<PlayerProfile> }
   | { type: 'UPDATE_MATH_PROGRESS'; payload: Partial<MathProgress> }
   | { type: 'UPDATE_CITY_PROGRESS'; payload: Partial<CityProgress> }
+  | { type: 'UPDATE_SKATE_PROGRESS'; payload: Partial<SkateProgress> }
   | { type: 'COMPLETE_MATH_LEVEL'; payload: { level: number; stars: number; coins: number } }
   | { type: 'ADD_ACHIEVEMENT'; payload: string }
   | { type: 'LOAD_STATE'; payload: ArcadeState };
@@ -109,6 +127,12 @@ function arcadeReducer(state: ArcadeState, action: ArcadeAction): ArcadeState {
       return {
         ...state,
         cityProgress: { ...state.cityProgress, ...action.payload },
+      };
+
+    case 'UPDATE_SKATE_PROGRESS':
+      return {
+        ...state,
+        skateProgress: { ...state.skateProgress, ...action.payload },
       };
 
     case 'COMPLETE_MATH_LEVEL': {
@@ -157,6 +181,7 @@ interface ArcadeContextValue {
   completeMathLevel: (level: number, stars: number, coins: number) => void;
   updateMathProgress: (progress: Partial<MathProgress>) => void;
   updateCityProgress: (progress: Partial<CityProgress>) => void;
+  updateSkateProgress: (progress: Partial<SkateProgress>) => void;
   addAchievement: (achievement: string) => void;
   getTotalStars: () => number;
 }
@@ -185,6 +210,7 @@ export function ArcadeProvider({ children }: { children: ReactNode }) {
             playerProfile: { ...initialPlayerProfile, ...parsed.playerProfile },
             mathProgress: { ...initialMathProgress, ...parsed.mathProgress },
             cityProgress: { ...initialCityProgress, ...parsed.cityProgress },
+            skateProgress: { ...initialSkateProgress, ...parsed.skateProgress },
           },
         });
       }
@@ -223,6 +249,10 @@ export function ArcadeProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'UPDATE_CITY_PROGRESS', payload: progress });
   };
 
+  const updateSkateProgress = (progress: Partial<SkateProgress>) => {
+    dispatch({ type: 'UPDATE_SKATE_PROGRESS', payload: progress });
+  };
+
   const addAchievement = (achievement: string) => {
     dispatch({ type: 'ADD_ACHIEVEMENT', payload: achievement });
   };
@@ -241,6 +271,7 @@ export function ArcadeProvider({ children }: { children: ReactNode }) {
         completeMathLevel,
         updateMathProgress,
         updateCityProgress,
+        updateSkateProgress,
         addAchievement,
         getTotalStars,
       }}

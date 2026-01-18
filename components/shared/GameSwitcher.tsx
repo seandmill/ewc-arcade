@@ -33,6 +33,15 @@ const GameSwitcher: React.FC = () => {
         return stars > 0 ? `${stars} ★` : 'New!';
       },
     },
+    {
+      id: 'mini-skate',
+      name: 'Mini Skate',
+      icon: '🛹',
+      getProgress: () => {
+        const tricks = state.skateProgress.totalTricks;
+        return tricks > 0 ? `${tricks} tricks` : 'New!';
+      },
+    },
   ];
 
   const handleGameChange = (gameId: GameType) => {

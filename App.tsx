@@ -9,6 +9,7 @@ import ProfileDisplay from './components/shared/ProfileDisplay';
 import ProfileEditorModal from './components/shared/ProfileEditorModal';
 import CityBuilderGame from './components/city-builder/CityBuilderGame';
 import MathAdventureGame from './components/math-adventure/MathAdventureGame';
+import MiniSkateGame from './components/mini-skate/MiniSkateGame';
 
 // Inner component that uses arcade context
 const ArcadeShell: React.FC = () => {
@@ -27,6 +28,7 @@ const ArcadeShell: React.FC = () => {
       <div className="absolute inset-0 pt-14">
         {state.activeGame === 'city-builder' && <CityBuilderGame />}
         {state.activeGame === 'math-adventure' && <MathAdventureGame />}
+        {state.activeGame === 'mini-skate' && <MiniSkateGame />}
       </div>
 
       {/* Profile Editor Modal */}
