@@ -2,29 +2,44 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
-import React, { useRef } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
-import { Environment, PerspectiveCamera } from '@react-three/drei';
+import React, { useRef, useCallback } from 'react';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { Environment } from '@react-three/drei';
 import * as THREE from 'three';
 import Skatepark from './Skatepark';
 import Skater, { SkaterState } from './Skater';
 import { InputState } from './useSkateControls';
 
-interface FollowCameraProps {
-  // Pass the ref so we can read current values each frame
-  skaterStateRef: React.RefObject<SkaterState>;
-}
+// Module-level store for camera target - shared between Skater and FollowCamera
+// This avoids React/R3F reconciler boundary issues with refs
+export const cameraTarget = {
+  position: new THREE.Vector3(0, 0, 0),
+  rotation: 0,
+};
 
-// Follow camera that smoothly tracks the skater
-const FollowCamera: React.FC<FollowCameraProps> = ({ skaterStateRef }) => {
-  const cameraRef = useRef<THREE.PerspectiveCamera>(null);
+// Follow camera that smoothly tracks the skater using direct camera access
+const FollowCamera: React.FC = () => {
+  const { camera } = useThree();
+  const frameCountRef = useRef(0);
+  const initializedRef = useRef(false);
 
+  // Initialize camera position on first frame
   useFrame(() => {
-    if (!cameraRef.current || !skaterStateRef.current) return;
+    if (!initializedRef.current) {
+      camera.position.set(0, 5, -8);
+      initializedRef.current = true;
+    }
 
-    // Read current skater state each frame (not captured at render time)
-    const targetPosition = skaterStateRef.current.position;
-    const targetRotation = skaterStateRef.current.rotation;
+    // Read from module-level store (updated every frame by Skater)
+    const targetPosition = cameraTarget.position;
+    const targetRotation = cameraTarget.rotation;
+
+    // DEBUG: Log every 60 frames to verify camera is updating
+    frameCountRef.current++;
+    if (frameCountRef.current % 60 === 0) {
+      console.log('[FollowCamera] Target:', targetPosition.x.toFixed(2), targetPosition.y.toFixed(2), targetPosition.z.toFixed(2),
+        'Camera:', camera.position.x.toFixed(2), camera.position.y.toFixed(2), camera.position.z.toFixed(2));
+    }
 
     // Camera offset: behind and above the skater
     const offsetDistance = 6;
@@ -41,7 +56,7 @@ const FollowCamera: React.FC<FollowCameraProps> = ({ skaterStateRef }) => {
     );
 
     // Smooth interpolation
-    cameraRef.current.position.lerp(desiredPosition, 0.08);
+    camera.position.lerp(desiredPosition, 0.08);
 
     // Look at skater (slightly above ground level)
     const lookTarget = new THREE.Vector3(
@@ -49,19 +64,13 @@ const FollowCamera: React.FC<FollowCameraProps> = ({ skaterStateRef }) => {
       targetPosition.y + 0.5,
       targetPosition.z
     );
-    cameraRef.current.lookAt(lookTarget);
+    camera.lookAt(lookTarget);
+
+    // Ensure the camera matrix is updated
+    camera.updateProjectionMatrix();
   });
 
-  return (
-    <PerspectiveCamera
-      ref={cameraRef}
-      makeDefault
-      fov={60}
-      near={0.1}
-      far={1000}
-      position={[0, 5, -8]}
-    />
-  );
+  return null;  // No component needed - we manipulate the default camera directly
 };
 
 interface SkateCanvasProps {
@@ -77,25 +86,15 @@ const SkateCanvas: React.FC<SkateCanvasProps> = ({
   onSkaterUpdate,
   onTrickPerformed,
 }) => {
-  const skaterStateRef = useRef<SkaterState>({
-    position: new THREE.Vector3(0, 0, 0),
-    velocity: new THREE.Vector3(0, 0, 0),
-    rotation: 0,
-    verticalVelocity: 0,
-    isGrounded: true,
-    isGrinding: false,
-    currentTrick: null,
-  });
-
-  const handleStateUpdate = (state: SkaterState) => {
-    skaterStateRef.current = state;
+  // Handler for throttled state updates (UI uses this)
+  const handleStateUpdate = useCallback((state: SkaterState) => {
     onSkaterUpdate(state);
-  };
+  }, [onSkaterUpdate]);
 
   return (
     <Canvas shadows>
-      {/* Camera - pass ref so it reads current values each frame */}
-      <FollowCamera skaterStateRef={skaterStateRef} />
+      {/* Camera - reads from module-level cameraTarget updated every frame by Skater */}
+      <FollowCamera />
 
       {/* Lighting */}
       <ambientLight intensity={0.5} />

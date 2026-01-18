@@ -8,6 +8,7 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { ASSETS, PHYSICS, TRICKS } from './skateConstants';
 import { InputState } from './useSkateControls';
+import { cameraTarget } from './SkateCanvas';
 
 export interface SkaterState {
   position: THREE.Vector3;
@@ -141,14 +142,22 @@ const Skater: React.FC<SkaterProps> = ({
     }
   };
 
-  // Start idle animation on mount
+  // Store actions in a ref to avoid stale closure issues without causing re-renders
+  const actionsRef = useRef(actions);
+  useEffect(() => {
+    actionsRef.current = actions;
+  }, [actions]);
+
+  // Start idle animation on mount - use ref to avoid infinite loop from actions changing
   useEffect(() => {
     const idleAnim = animationMap.idle;
-    if (idleAnim && actions[idleAnim]) {
-      actions[idleAnim]?.reset().play();
+    const currentActions = actionsRef.current;
+    if (idleAnim && currentActions[idleAnim]) {
+      currentActions[idleAnim]?.reset().play();
       currentAnimRef.current = idleAnim;
     }
-  }, [actions, animationMap.idle]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [animationMap.idle]);
 
   // Physics update
   useFrame((_, delta) => {
@@ -266,6 +275,10 @@ const Skater: React.FC<SkaterProps> = ({
 
     // Update previous input state for edge detection
     prevJumpRef.current = currentInput.jump;
+
+    // Always update camera target every frame (no throttle) for smooth following
+    cameraTarget.position.copy(state.position);
+    cameraTarget.rotation = state.rotation;
 
     // Throttle React state updates to reduce re-renders (~20fps instead of 60fps)
     const now = performance.now();
