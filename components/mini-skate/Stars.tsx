@@ -83,8 +83,16 @@ const Star: React.FC<StarProps> = ({ star, onCollect, skaterPosition }) => {
         metalness={0.8}
         roughness={0.2}
       />
-      {/* Glow effect */}
-      <pointLight color={color} intensity={0.5} distance={2} />
+      {/* Lightweight glow halo */}
+      <mesh scale={1.6}>
+        <octahedronGeometry args={[scale, 0]} />
+        <meshBasicMaterial
+          color={color}
+          transparent
+          opacity={0.25}
+          toneMapped={false}
+        />
+      </mesh>
     </mesh>
   );
 };

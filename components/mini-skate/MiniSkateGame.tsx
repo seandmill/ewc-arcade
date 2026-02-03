@@ -15,6 +15,12 @@ import { STARS } from './skateConstants';
 type GamePhase = 'menu' | 'playing' | 'paused';
 type SkateCharacter = 'boy' | 'girl';
 
+declare global {
+  interface Window {
+    render_game_to_text?: () => string;
+  }
+}
+
 const MiniSkateGame: React.FC = () => {
   const { state, updateSkateProgress } = useArcade();
   const { playClick, playCorrect } = useSound();
@@ -30,6 +36,7 @@ const MiniSkateGame: React.FC = () => {
   const [lastTrick, setLastTrick] = useState<string | null>(null);
   const [sessionStars, setSessionStars] = useState<number[]>([]); // Stars collected this session
   const [starFlash, setStarFlash] = useState<{ points: number; show: boolean }>({ points: 0, show: false });
+  const renderStateRef = useRef<Record<string, unknown>>({});
 
   // Skater position for star collision - use ref for performance
   const skaterPositionRef = useRef(new THREE.Vector3(0, 0, 0));
@@ -87,7 +94,7 @@ const MiniSkateGame: React.FC = () => {
 
     // Reset combo when landing (grounded and was airborne)
     // Use ref to track previous grounded state to avoid stale closure
-    if (newState.isGrounded && !prevGroundedRef.current) {
+    if (newState.isGrounded && !prevGroundedRef.current && newState.airborneTime > 0.15) {
       // Small delay to allow combo to register
       setTimeout(() => {
         setComboCount(0);
@@ -151,6 +158,46 @@ const MiniSkateGame: React.FC = () => {
     playClick();
     setPhase('paused');
   }, [playClick]);
+
+  useEffect(() => {
+    const player = skaterState
+      ? {
+          x: skaterState.position.x,
+          y: skaterState.position.y,
+          z: skaterState.position.z,
+          velocity: {
+            x: skaterState.velocity.x,
+            y: skaterState.velocity.y,
+            z: skaterState.velocity.z,
+          },
+          verticalVelocity: skaterState.verticalVelocity,
+          rotation: skaterState.rotation,
+          airborneTime: skaterState.airborneTime,
+        }
+      : null;
+
+    renderStateRef.current = {
+      phase,
+      coordinateSystem: 'Origin at park center; +X east, +Z south, +Y up.',
+      player,
+      isGrounded: skaterState?.isGrounded ?? true,
+      currentTrick: skaterState?.currentTrick ?? null,
+      comboCount,
+      trickCount,
+      starsCollected: allCollectedStars.length,
+      starsTotal: STARS.length,
+      speed: skaterState ? Number(skaterState.velocity.length().toFixed(2)) : 0,
+    };
+  }, [phase, skaterState, comboCount, trickCount, allCollectedStars.length]);
+
+  useEffect(() => {
+    window.render_game_to_text = () => JSON.stringify(renderStateRef.current);
+    return () => {
+      if (window.render_game_to_text) {
+        delete window.render_game_to_text;
+      }
+    };
+  }, []);
 
   const handleResume = useCallback(() => {
     playClick();

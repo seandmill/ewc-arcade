@@ -10,6 +10,12 @@ import { ASSETS, PHYSICS, TRICKS, PARK_SIZE, RAMP_DATA, OBSTACLE_DATA } from './
 import { InputState } from './useSkateControls';
 import { cameraTarget } from './SkateCanvas';
 
+declare global {
+  interface Window {
+    advanceTime?: (ms: number) => void;
+  }
+}
+
 export interface SkaterState {
   position: THREE.Vector3;
   velocity: THREE.Vector3;
@@ -18,6 +24,7 @@ export interface SkaterState {
   isGrounded: boolean;
   isGrinding: boolean;
   currentTrick: string | null;
+  airborneTime: number;
 }
 
 interface SkaterProps {
@@ -42,6 +49,7 @@ const Skater: React.FC<SkaterProps> = ({
     isGrounded: true,
     isGrinding: false,
     currentTrick: null,
+    airborneTime: 0,
   });
 
   // CRITICAL: Use a ref to track input so useFrame always sees latest values
@@ -57,6 +65,13 @@ const Skater: React.FC<SkaterProps> = ({
 
   // Track previous input state for edge detection (prevents auto-jumping when holding)
   const prevJumpRef = useRef(false);
+  const rampContactRef = useRef(false);
+
+  const FIXED_DT = 1 / 60;
+  const MAX_ACCUM = 0.1;
+  const accumulatorRef = useRef(0);
+  const advanceMsRef = useRef(0);
+  const tempVecRef = useRef(new THREE.Vector3());
 
   // Throttle state updates to reduce React re-renders (update at ~20fps instead of 60fps)
   const lastUpdateTimeRef = useRef(0);
@@ -151,6 +166,17 @@ const Skater: React.FC<SkaterProps> = ({
     actionsRef.current = actions;
   }, [actions]);
 
+  useEffect(() => {
+    window.advanceTime = (ms: number) => {
+      advanceMsRef.current += ms;
+    };
+    return () => {
+      if (window.advanceTime) {
+        delete window.advanceTime;
+      }
+    };
+  }, []);
+
   // Start idle animation on mount - use ref to avoid infinite loop from actions changing
   useEffect(() => {
     const idleAnim = animationMap.idle;
@@ -162,64 +188,61 @@ const Skater: React.FC<SkaterProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [animationMap.idle]);
 
-  // Physics update
-  useFrame((_, delta) => {
-    if (!groupRef.current) return;
-
-    // Read input from ref to get latest values (avoids stale closure)
+  const stepPhysics = (dt: number) => {
     const currentInput = inputRef.current;
     const state = stateRef.current;
-    const speed = state.velocity.length();
+    const tempVec = tempVecRef.current;
+    const wasGrounded = state.isGrounded;
 
     // Gravity
     if (!state.isGrounded) {
-      state.verticalVelocity -= PHYSICS.GRAVITY * delta;
+      state.verticalVelocity -= PHYSICS.GRAVITY * dt;
+    } else {
+      state.verticalVelocity = 0;
     }
+    state.verticalVelocity = THREE.MathUtils.clamp(
+      state.verticalVelocity,
+      -PHYSICS.MAX_VERTICAL_VEL,
+      PHYSICS.MAX_VERTICAL_VEL
+    );
 
-    // Movement input
     if (state.isGrounded) {
-      // Forward/backward
       if (currentInput.forward) {
-        const forward = new THREE.Vector3(
-          Math.sin(state.rotation),
-          0,
-          Math.cos(state.rotation)
-        );
-        state.velocity.add(forward.multiplyScalar(PHYSICS.PUSH_ACCEL * delta));
+        tempVec.set(Math.sin(state.rotation), 0, Math.cos(state.rotation));
+        state.velocity.addScaledVector(tempVec, PHYSICS.PUSH_ACCEL * dt);
       }
 
       if (currentInput.backward) {
         state.velocity.multiplyScalar(PHYSICS.BRAKE_FRICTION);
       }
 
-      // Turning
       if (currentInput.turnLeft) {
-        state.rotation += PHYSICS.TURN_SPEED * delta;
+        state.rotation += PHYSICS.TURN_SPEED * dt;
       }
       if (currentInput.turnRight) {
-        state.rotation -= PHYSICS.TURN_SPEED * delta;
+        state.rotation -= PHYSICS.TURN_SPEED * dt;
       }
 
-      // Jump - use edge detection to prevent auto-jumping when holding button
       const jumpPressed = currentInput.jump && !prevJumpRef.current;
-      if (jumpPressed && state.isGrounded) {
-        state.verticalVelocity = PHYSICS.JUMP_FORCE;
+      if (jumpPressed) {
+        state.verticalVelocity = rampContactRef.current
+          ? PHYSICS.RAMP_LAUNCH
+          : PHYSICS.JUMP_FORCE;
         state.isGrounded = false;
         playAnimation('ollie', false);
       }
 
-      // Apply friction
-      state.velocity.multiplyScalar(PHYSICS.FRICTION);
+      if (!currentInput.backward) {
+        state.velocity.multiplyScalar(PHYSICS.FRICTION);
+      }
     } else {
-      // Air control (reduced)
       if (currentInput.turnLeft) {
-        state.rotation += PHYSICS.TURN_SPEED * PHYSICS.AIR_CONTROL * delta;
+        state.rotation += PHYSICS.TURN_SPEED * PHYSICS.AIR_CONTROL * dt;
       }
       if (currentInput.turnRight) {
-        state.rotation -= PHYSICS.TURN_SPEED * PHYSICS.AIR_CONTROL * delta;
+        state.rotation -= PHYSICS.TURN_SPEED * PHYSICS.AIR_CONTROL * dt;
       }
 
-      // Check for trick input while airborne
       const trickIndex = currentInput.trick1 ? 0 : currentInput.trick2 ? 1 : currentInput.trick3 ? 2 : currentInput.trick4 ? 3 : -1;
       if (trickIndex >= 0 && trickIndex < TRICKS.length && trickIndex !== lastTrickRef.current) {
         const trick = TRICKS[trickIndex as 0 | 1 | 2 | 3];
@@ -230,33 +253,29 @@ const Skater: React.FC<SkaterProps> = ({
       }
     }
 
-    // Clamp speed
     if (state.velocity.length() > PHYSICS.MAX_SPEED) {
-      state.velocity.normalize().multiplyScalar(PHYSICS.MAX_SPEED);
+      state.velocity.setLength(PHYSICS.MAX_SPEED);
+    }
+    if (state.velocity.lengthSq() < 0.0004) {
+      state.velocity.set(0, 0, 0);
     }
 
-    // Update position
-    state.position.add(state.velocity.clone().multiplyScalar(delta * 60));
-    state.position.y += state.verticalVelocity * delta;
+    state.position.addScaledVector(state.velocity, dt);
+    state.position.y += state.verticalVelocity * dt;
 
-    // Ramp collision detection - check if on a ramp and adjust Y position
+    // Ramp collision detection
     let onRamp = false;
-    let rampBoost = 1.0;
     for (const ramp of RAMP_DATA) {
-      const [rx, , rz] = ramp.position; // ry unused - ramps start at Y=0
-      const [sx, sy, sz] = ramp.size;
+      const [rx, , rz] = ramp.position;
+      const [sx, , sz] = ramp.size;
       const halfX = sx / 2;
       const halfZ = sz / 2;
 
-      // Check if within ramp bounds
       if (
         state.position.x >= rx - halfX && state.position.x <= rx + halfX &&
         state.position.z >= rz - halfZ && state.position.z <= rz + halfZ
       ) {
-        // Calculate ramp height based on direction and position
-        const slopeRad = (ramp.slopeAngle * Math.PI) / 180;
         let progress = 0;
-
         switch (ramp.direction) {
           case 'north':
             progress = (state.position.z - (rz - halfZ)) / sz;
@@ -273,73 +292,69 @@ const Skater: React.FC<SkaterProps> = ({
         }
 
         const rampHeight = Math.sin(progress * Math.PI / 2) * ramp.maxHeight;
-        if (state.position.y <= rampHeight + 0.1) {
+        const nearSurface = state.position.y <= rampHeight + 0.05 && state.verticalVelocity <= 0.2;
+        if (nearSurface) {
           state.position.y = rampHeight;
-          onRamp = true;
-          rampBoost = PHYSICS.RAMP_BOOST;
+          state.verticalVelocity = 0;
           state.isGrounded = true;
-
-          // Apply upward velocity boost when going up ramp
-          if (progress > 0.5 && state.verticalVelocity >= 0) {
-            state.verticalVelocity += progress * 0.1;
-          }
+          onRamp = true;
         }
       }
     }
 
     // Obstacle collision detection - simple AABB for boxes
+    let onSurface = onRamp;
     for (const obstacle of OBSTACLE_DATA) {
-      const [ox, , oz] = obstacle.position; // oy unused - obstacles at ground level
+      const [ox, , oz] = obstacle.position;
       const [sx, sy, sz] = obstacle.size;
       const halfX = sx / 2;
       const halfZ = sz / 2;
 
-      // Check if near obstacle
       if (
         state.position.x >= ox - halfX - 0.3 && state.position.x <= ox + halfX + 0.3 &&
         state.position.z >= oz - halfZ - 0.3 && state.position.z <= oz + halfZ + 0.3
       ) {
-        // Check if on top of obstacle
         if (state.position.y <= sy + 0.1 && state.position.y >= sy - 0.2) {
-          // On top - can grind/manual
           state.position.y = sy;
+          state.verticalVelocity = 0;
           state.isGrounded = true;
           state.currentTrick = null;
+          onSurface = true;
         } else if (state.position.y < sy) {
-          // Collision with side - push back
           const dx = state.position.x - ox;
           const dz = state.position.z - oz;
 
           if (Math.abs(dx) > Math.abs(dz)) {
             state.position.x = ox + Math.sign(dx) * (halfX + 0.3);
-            state.velocity.x *= -0.3; // Bounce
+            state.velocity.x *= -0.3;
           } else {
             state.position.z = oz + Math.sign(dz) * (halfZ + 0.3);
-            state.velocity.z *= -0.3; // Bounce
+            state.velocity.z *= -0.3;
           }
         }
       }
     }
 
-    // Ground collision (when not on ramp or obstacle)
-    if (!onRamp && state.position.y <= 0 && state.verticalVelocity < 0) {
+    if (!onSurface && state.position.y <= 0 && state.verticalVelocity < 0) {
       state.position.y = 0;
       state.verticalVelocity = 0;
       if (!state.isGrounded) {
         state.isGrounded = true;
-        state.currentTrick = null;
-        lastTrickRef.current = -1;
       }
     }
 
-    // Park bounds - expanded to 40x40 (±19 units)
+    if (state.isGrounded && !wasGrounded) {
+      state.currentTrick = null;
+      lastTrickRef.current = -1;
+    }
+
     const boundSize = PARK_SIZE.boundSize;
     state.position.x = THREE.MathUtils.clamp(state.position.x, -boundSize, boundSize);
     state.position.z = THREE.MathUtils.clamp(state.position.z, -boundSize, boundSize);
 
-    // Update animation based on state
+    const speed = state.velocity.length();
     if (state.isGrounded && !state.isGrinding) {
-      if (speed > 0.5) {
+      if (speed > 0.4) {
         if (currentInput.forward) {
           playAnimation('push');
         } else if (currentInput.turnLeft) {
@@ -354,28 +369,48 @@ const Skater: React.FC<SkaterProps> = ({
       }
     }
 
-    // Apply to mesh
+    if (state.isGrounded) {
+      state.airborneTime = 0;
+    } else {
+      state.airborneTime += dt;
+    }
+
+    rampContactRef.current = onRamp;
+  };
+
+  // Physics update
+  useFrame((_, delta) => {
+    if (!groupRef.current) return;
+
+    const stepDelta = advanceMsRef.current > 0 ? advanceMsRef.current / 1000 : delta;
+    if (advanceMsRef.current > 0) {
+      advanceMsRef.current = 0;
+    }
+
+    accumulatorRef.current = Math.min(accumulatorRef.current + stepDelta, MAX_ACCUM);
+    while (accumulatorRef.current >= FIXED_DT) {
+      stepPhysics(FIXED_DT);
+      accumulatorRef.current -= FIXED_DT;
+    }
+
+    const state = stateRef.current;
+
     groupRef.current.position.copy(state.position);
     groupRef.current.rotation.y = state.rotation;
 
-    // Frame counter for development debugging (only logs in dev mode)
     if (import.meta.env.DEV && frameCountRef.current % 300 === 0) {
       console.log('[Skater] Position:', state.position.x.toFixed(1), state.position.y.toFixed(1), state.position.z.toFixed(1));
     }
     frameCountRef.current++;
 
-    // Update previous input state for edge detection
-    prevJumpRef.current = currentInput.jump;
+    prevJumpRef.current = inputRef.current.jump;
 
-    // Always update camera target every frame (no throttle) for smooth following
     cameraTarget.position.copy(state.position);
     cameraTarget.rotation = state.rotation;
 
-    // Throttle React state updates to reduce re-renders (~20fps instead of 60fps)
     const now = performance.now();
     if (now - lastUpdateTimeRef.current >= UPDATE_INTERVAL) {
       lastUpdateTimeRef.current = now;
-      // Notify parent of state - clone Vector3 objects to avoid reference issues
       onStateUpdate({
         ...state,
         position: state.position.clone(),

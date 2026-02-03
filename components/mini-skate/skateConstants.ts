@@ -6,33 +6,34 @@
 // Physics constants for arcade-style skating
 // Tuned for smooth, controllable movement (not too fast!)
 export const PHYSICS = {
-  GRAVITY: 15,
-  PUSH_ACCEL: 0.5,      // Reduced from 12 - much more controllable
-  MAX_SPEED: 0.2,       // Reduced from 8 - prevents zooming off screen
-  TURN_SPEED: 1,        // Slightly reduced from 3.5
-  FRICTION: 0.95,       // More friction for quicker stops
-  BRAKE_FRICTION: 0.85, // Stronger braking
-  JUMP_FORCE: 5,        // Slightly reduced
-  AIR_CONTROL: 0.3,
-  GRIND_SPEED: 0.3,     // Match the new slower speed
-  RAMP_BOOST: 1.3,
+  GRAVITY: 19,
+  PUSH_ACCEL: 6,
+  MAX_SPEED: 4,
+  TURN_SPEED: 2.2,
+  FRICTION: 0.92,
+  BRAKE_FRICTION: 0.82,
+  JUMP_FORCE: 5.6,
+  AIR_CONTROL: 0.35,
+  GRIND_SPEED: 3,
+  MAX_VERTICAL_VEL: 6,
+  RAMP_LAUNCH: 3,
 } as const;
 
 // Park dimensions - expanded from 20x20 to 40x40
 export const PARK_SIZE = {
-  width: 40,
-  depth: 40,
-  boundSize: 19, // Half park size minus 1 for safe boundary
+  width: 32,
+  depth: 32,
+  boundSize: 15, // Half park size minus 1 for safe boundary
 } as const;
 
 // Zone definitions for the skatepark
 // Each zone has a distinct theme and difficulty
 export const ZONES = {
-  BEGINNER: { minX: -20, maxX: 0, minZ: 0, maxZ: 20, name: 'Beginner' },
-  STREET: { minX: 0, maxX: 20, minZ: 0, maxZ: 20, name: 'Street' },
-  BOWL: { minX: 0, maxX: 20, minZ: -20, maxZ: 0, name: 'Bowl' },
-  ADVANCED: { minX: -20, maxX: 0, minZ: -20, maxZ: 0, name: 'Advanced' },
-  HUB: { minX: -5, maxX: 5, minZ: -5, maxZ: 5, name: 'Hub' },
+  BEGINNER: { minX: -16, maxX: 0, minZ: 0, maxZ: 16, name: 'Beginner' },
+  STREET: { minX: 0, maxX: 16, minZ: 0, maxZ: 16, name: 'Street' },
+  BOWL: { minX: 0, maxX: 16, minZ: -16, maxZ: 0, name: 'Bowl' },
+  ADVANCED: { minX: -16, maxX: 0, minZ: -16, maxZ: 0, name: 'Advanced' },
+  HUB: { minX: -4, maxX: 4, minZ: -4, maxZ: 4, name: 'Hub' },
 } as const;
 
 export type ZoneName = keyof typeof ZONES;
@@ -103,9 +104,9 @@ export const ASSET_MAP: Record<string, string> = {
 // Determine floor type based on position (zone-based visual differentiation)
 function getFloorTypeForPosition(x: number, z: number): 'floor-concrete' | 'floor-wood' {
   // Hub area gets wood floor (central plaza)
-  if (x >= -5 && x <= 5 && z >= -5 && z <= 5) return 'floor-wood';
+  if (x >= -4 && x <= 4 && z >= -4 && z <= 4) return 'floor-wood';
   // Bowl zone inner area gets wood floor for visual distinction
-  if (x >= 6 && x <= 16 && z >= -16 && z <= -6) return 'floor-wood';
+  if (x >= 4 && x <= 12 && z >= -12 && z <= -4) return 'floor-wood';
   // Everything else is concrete
   return 'floor-concrete';
 }
@@ -134,116 +135,59 @@ function generateFloorGrid(width: number, depth: number): ParkElement[] {
   return elements;
 }
 
-// Skatepark layout - Expanded 40x40 park with 4 themed zones
+export const FLOOR_TILES: ParkElement[] = generateFloorGrid(PARK_SIZE.width, PARK_SIZE.depth);
+
+// Skatepark layout - Focused 32x32 park with clear flow lines
 // BEGINNER (SW): Easy rails, small obstacles for learning
 // STREET (SE): Technical rails, steps, ledges
-// BOWL (NE): Transitions, bowl pieces, half-pipes for air
-// ADVANCED (NW): Complex lines, high rails, flow course
-// HUB (Center): Central meeting point with directional markers
+// BOWL (NE): Transitions, bowl pieces, half-pipe for air
+// ADVANCED (NW): Short flow course, high rail
+// HUB (Center): Compact spawn + connective rails
 export const SKATEPARK_LAYOUT: ParkElement[] = [
-  // Floor grid (40x40 tiles at 1 unit each covers ±19 unit area)
-  ...generateFloorGrid(PARK_SIZE.width, PARK_SIZE.depth),
-
   // ═══════════════════════════════════════════════════════════
   // ZONE 1: BEGINNER AREA (Southwest Quadrant)
-  // Purpose: Safe learning environment with low obstacles
   // ═══════════════════════════════════════════════════════════
-  // Low rails for practicing grinds
-  { type: 'rail-low', position: [-14, 0, 14], rotation: 0 },
-  { type: 'rail-low', position: [-14, 0, 10], rotation: 0 },
-  { type: 'rail-low', position: [-10, 0, 12], rotation: 90 },
-  // Small obstacle boxes for learning
-  { type: 'obstacle-box', position: [-10, 0, 16], rotation: 0 },
-  { type: 'obstacle-box', position: [-8, 0, 16], rotation: 0 },
-  { type: 'obstacle-box', position: [-12, 0, 8], rotation: 0 },
-  // End caps for practice lines
-  { type: 'obstacle-end', position: [-16, 0, 10], rotation: 0 },
-  { type: 'obstacle-end', position: [-6, 0, 14], rotation: 90 },
-  // Wood structure for elevated practice
-  { type: 'structure-wood', position: [-16, 0, 6], rotation: 0 },
-  // Small steps for ollie practice
-  { type: 'steps', position: [-8, 0, 8], rotation: 0 },
+  { type: 'rail-low', position: [-12, 0, 12], rotation: 0 },
+  { type: 'rail-low', position: [-8, 0, 10], rotation: 90 },
+  { type: 'obstacle-box', position: [-10, 0, 14], rotation: 0 },
+  { type: 'obstacle-box', position: [-6, 0, 12], rotation: 0 },
+  { type: 'steps', position: [-12, 0, 6], rotation: 0 },
+  { type: 'obstacle-end', position: [-14, 0, 10], rotation: 0 },
 
   // ═══════════════════════════════════════════════════════════
   // ZONE 2: STREET SECTION (Southeast Quadrant)
-  // Purpose: Technical tricks - rails, ledges, stairs
   // ═══════════════════════════════════════════════════════════
-  // Mixed rail heights for variety
-  { type: 'rail-slope', position: [10, 0, 14], rotation: 45 },
-  { type: 'rail-high', position: [14, 0, 12], rotation: 0 },
-  { type: 'rail-high', position: [14, 0, 8], rotation: 0 },
-  { type: 'rail-curve', position: [12, 0, 6], rotation: 90 },
-  { type: 'rail-low', position: [8, 0, 16], rotation: 90 },
-  // Multiple step sets for stair tricks
-  { type: 'steps', position: [8, 0, 10], rotation: 0 },
-  { type: 'steps', position: [16, 0, 16], rotation: 180 },
-  // Ledges for manuals and grinds
-  { type: 'obstacle-middle', position: [10, 0, 4], rotation: 0 },
-  { type: 'obstacle-box', position: [14, 0, 4], rotation: 45 },
-  { type: 'obstacle-end', position: [16, 0, 10], rotation: 90 },
-  // Elevated platform section
-  { type: 'structure-platform', position: [16, 0, 4], rotation: 0 },
-  { type: 'structure-wood', position: [6, 0, 6], rotation: 0 },
+  { type: 'rail-high', position: [10, 0, 12], rotation: 0 },
+  { type: 'rail-slope', position: [12, 0, 8], rotation: 45 },
+  { type: 'obstacle-middle', position: [8, 0, 6], rotation: 0 },
+  { type: 'steps', position: [14, 0, 10], rotation: 180 },
+  { type: 'structure-platform', position: [12, 0, 4], rotation: 0 },
+  { type: 'rail-low', position: [6, 0, 14], rotation: 90 },
 
   // ═══════════════════════════════════════════════════════════
   // ZONE 3: BOWL/VERT SECTION (Northeast Quadrant)
-  // Purpose: Transitions, air tricks, flow
   // ═══════════════════════════════════════════════════════════
-  // Bowl pieces forming a skating bowl
-  { type: 'bowl-corner-inner', position: [14, 0, -14], rotation: 0 },
-  { type: 'bowl-corner-inner', position: [10, 0, -10], rotation: 180 },
-  { type: 'bowl-side', position: [12, 0, -16], rotation: 90 },
-  { type: 'bowl-side', position: [16, 0, -12], rotation: 0 },
-  { type: 'bowl-corner-outer', position: [8, 0, -8], rotation: 180 },
-  // Half-pipes for vert tricks
-  { type: 'half-pipe', position: [8, 0, -14], rotation: 0 },
-  { type: 'half-pipe', position: [14, 0, -6], rotation: 90 },
-  // Box for lip tricks
-  { type: 'obstacle-box', position: [10, 0, -16], rotation: 0 },
-  // Additional flow element
-  { type: 'rail-curve', position: [6, 0, -6], rotation: 0 },
+  { type: 'half-pipe', position: [6, 0, -12], rotation: 0 },
+  { type: 'bowl-corner-inner', position: [12, 0, -10], rotation: 90 },
+  { type: 'bowl-side', position: [8, 0, -14], rotation: 90 },
+  { type: 'rail-curve', position: [4, 0, -8], rotation: 0 },
+  { type: 'obstacle-box', position: [10, 0, -14], rotation: 0 },
 
   // ═══════════════════════════════════════════════════════════
   // ZONE 4: ADVANCED FLOW COURSE (Northwest Quadrant)
-  // Purpose: Complex lines, combos, high-skill obstacles
   // ═══════════════════════════════════════════════════════════
-  // Half-pipes for vert transitions
-  { type: 'half-pipe', position: [-10, 0, -14], rotation: 180 },
-  { type: 'half-pipe', position: [-16, 0, -8], rotation: 90 },
-  // High rails requiring precision
-  { type: 'rail-high', position: [-14, 0, -10], rotation: 45 },
-  { type: 'rail-high', position: [-8, 0, -8], rotation: 0 },
-  { type: 'rail-slope', position: [-8, 0, -4], rotation: 0 },
-  // Curved rail for style points
-  { type: 'rail-curve', position: [-12, 0, -16], rotation: 0 },
-  { type: 'rail-low', position: [-16, 0, -12], rotation: 90 },
-  // Complex obstacle arrangement
-  { type: 'obstacle-middle', position: [-12, 0, -12], rotation: 90 },
-  { type: 'obstacle-box', position: [-8, 0, -16], rotation: 45 },
-  { type: 'obstacle-end', position: [-14, 0, -6], rotation: 0 },
-  // Steps for gap tricks
-  { type: 'steps', position: [-16, 0, -16], rotation: 270 },
-  // Elevated platforms for drops
-  { type: 'structure-platform', position: [-16, 0, -14], rotation: 0 },
-  { type: 'structure-wood', position: [-10, 0, -10], rotation: 270 },
+  { type: 'half-pipe', position: [-10, 0, -12], rotation: 180 },
+  { type: 'rail-high', position: [-12, 0, -8], rotation: 45 },
+  { type: 'obstacle-middle', position: [-8, 0, -10], rotation: 90 },
+  { type: 'rail-low', position: [-14, 0, -12], rotation: 90 },
+  { type: 'steps', position: [-12, 0, -14], rotation: 270 },
 
   // ═══════════════════════════════════════════════════════════
   // CENTRAL HUB (Origin Area)
-  // Purpose: Spawn point, connects all zones
   // ═══════════════════════════════════════════════════════════
-  // Central feature
   { type: 'obstacle-box', position: [0, 0, 0], rotation: 45 },
-  // Directional markers
-  { type: 'obstacle-middle', position: [-3, 0, 3], rotation: 0 },
-  { type: 'obstacle-middle', position: [3, 0, -3], rotation: 0 },
-  // Connective rails
   { type: 'rail-low', position: [-3, 0, -3], rotation: 45 },
   { type: 'rail-low', position: [3, 0, 3], rotation: 45 },
-  // Flow paths to each zone
-  { type: 'obstacle-end', position: [0, 0, 4], rotation: 0 },
-  { type: 'obstacle-end', position: [0, 0, -4], rotation: 180 },
-  { type: 'obstacle-end', position: [4, 0, 0], rotation: 90 },
-  { type: 'obstacle-end', position: [-4, 0, 0], rotation: 270 },
 ];
 
 // Animation names (from Kenney assets)
@@ -325,16 +269,13 @@ export interface RampData {
 
 // Generate ramp data from layout
 export const RAMP_DATA: RampData[] = [
-  // Bowl zone half-pipes
-  { id: 'hp1', position: [8, 0, -14], size: [4, 2, 2], maxHeight: 2, direction: 'north', slopeAngle: 60 },
-  { id: 'hp2', position: [14, 0, -6], size: [2, 2, 4], maxHeight: 2, direction: 'east', slopeAngle: 60 },
-  // Advanced zone half-pipes
-  { id: 'hp3', position: [-10, 0, -14], size: [4, 2, 2], maxHeight: 2, direction: 'south', slopeAngle: 60 },
-  { id: 'hp4', position: [-16, 0, -8], size: [2, 2, 4], maxHeight: 2, direction: 'west', slopeAngle: 60 },
+  // Bowl zone half-pipe
+  { id: 'hp1', position: [6, 0, -12], size: [4, 2, 2], maxHeight: 2, direction: 'north', slopeAngle: 60 },
+  // Advanced zone half-pipe
+  { id: 'hp2', position: [-10, 0, -12], size: [4, 2, 2], maxHeight: 2, direction: 'south', slopeAngle: 60 },
   // Bowl pieces (gentler slopes)
-  { id: 'bowl1', position: [14, 0, -14], size: [2, 1.5, 2], maxHeight: 1.5, direction: 'south', slopeAngle: 45 },
-  { id: 'bowl2', position: [12, 0, -16], size: [2, 1.5, 0.5], maxHeight: 1.5, direction: 'north', slopeAngle: 45 },
-  { id: 'bowl3', position: [16, 0, -12], size: [0.5, 1.5, 2], maxHeight: 1.5, direction: 'west', slopeAngle: 45 },
+  { id: 'bowl1', position: [12, 0, -10], size: [2, 1.5, 2], maxHeight: 1.5, direction: 'east', slopeAngle: 45 },
+  { id: 'bowl2', position: [8, 0, -14], size: [2, 1.5, 0.5], maxHeight: 1.5, direction: 'north', slopeAngle: 45 },
 ];
 
 // Rail collision data (line segments)
@@ -349,26 +290,20 @@ export interface RailData {
 // Generate rail data from layout positions
 export const RAIL_DATA: RailData[] = [
   // Beginner zone rails (low)
-  { id: 'r1', start: [-15, 0.5, 14], end: [-13, 0.5, 14], height: 0.5, zone: 'BEGINNER' },
-  { id: 'r2', start: [-15, 0.5, 10], end: [-13, 0.5, 10], height: 0.5, zone: 'BEGINNER' },
-  { id: 'r3', start: [-10, 0.5, 11], end: [-10, 0.5, 13], height: 0.5, zone: 'BEGINNER' },
+  { id: 'r1', start: [-13, 0.5, 12], end: [-11, 0.5, 12], height: 0.5, zone: 'BEGINNER' },
+  { id: 'r2', start: [-8, 0.5, 9], end: [-8, 0.5, 11], height: 0.5, zone: 'BEGINNER' },
   // Street zone rails (mixed heights)
-  { id: 'r4', start: [9, 0.5, 13], end: [11, 1, 15], height: 0.75, zone: 'STREET' },
-  { id: 'r5', start: [14, 1, 11], end: [14, 1, 13], height: 1, zone: 'STREET' },
-  { id: 'r6', start: [14, 1, 7], end: [14, 1, 9], height: 1, zone: 'STREET' },
-  { id: 'r7', start: [11, 0.5, 6], end: [13, 0.5, 6], height: 0.5, zone: 'STREET' },
-  { id: 'r8', start: [7, 0.5, 16], end: [9, 0.5, 16], height: 0.5, zone: 'STREET' },
+  { id: 'r3', start: [9, 1, 12], end: [11, 1, 12], height: 1, zone: 'STREET' },
+  { id: 'r4', start: [11, 0.5, 7], end: [13, 0.8, 9], height: 0.75, zone: 'STREET' },
+  { id: 'r5', start: [6, 0.5, 13], end: [6, 0.5, 15], height: 0.5, zone: 'STREET' },
   // Bowl zone curved rail
-  { id: 'r9', start: [5, 0.5, -6], end: [7, 0.5, -6], height: 0.5, zone: 'BOWL' },
+  { id: 'r6', start: [3, 0.5, -8], end: [5, 0.5, -8], height: 0.5, zone: 'BOWL' },
   // Advanced zone rails (high)
-  { id: 'r10', start: [-15, 1, -11], end: [-13, 1, -9], height: 1, zone: 'ADVANCED' },
-  { id: 'r11', start: [-9, 1, -8], end: [-7, 1, -8], height: 1, zone: 'ADVANCED' },
-  { id: 'r12', start: [-9, 0.5, -4], end: [-7, 0.8, -4], height: 0.65, zone: 'ADVANCED' },
-  { id: 'r13', start: [-13, 0.5, -16], end: [-11, 0.5, -16], height: 0.5, zone: 'ADVANCED' },
-  { id: 'r14', start: [-16, 0.5, -13], end: [-16, 0.5, -11], height: 0.5, zone: 'ADVANCED' },
+  { id: 'r7', start: [-13, 1, -9], end: [-11, 1, -7], height: 1, zone: 'ADVANCED' },
+  { id: 'r8', start: [-14, 0.5, -13], end: [-14, 0.5, -11], height: 0.5, zone: 'ADVANCED' },
   // Hub rails
-  { id: 'r15', start: [-4, 0.5, -4], end: [-2, 0.5, -2], height: 0.5, zone: 'HUB' },
-  { id: 'r16', start: [2, 0.5, 2], end: [4, 0.5, 4], height: 0.5, zone: 'HUB' },
+  { id: 'r9', start: [-4, 0.5, -4], end: [-2, 0.5, -2], height: 0.5, zone: 'HUB' },
+  { id: 'r10', start: [2, 0.5, 2], end: [4, 0.5, 4], height: 0.5, zone: 'HUB' },
 ];
 
 // Obstacle/box collision data
@@ -382,24 +317,21 @@ export interface ObstacleData {
 
 export const OBSTACLE_DATA: ObstacleData[] = [
   // Beginner zone boxes
-  { id: 'o1', position: [-10, 0, 16], size: [1, 0.5, 1], grindable: true, zone: 'BEGINNER' },
-  { id: 'o2', position: [-8, 0, 16], size: [1, 0.5, 1], grindable: true, zone: 'BEGINNER' },
-  { id: 'o3', position: [-12, 0, 8], size: [1, 0.5, 1], grindable: true, zone: 'BEGINNER' },
+  { id: 'o1', position: [-10, 0, 14], size: [1, 0.5, 1], grindable: true, zone: 'BEGINNER' },
+  { id: 'o2', position: [-6, 0, 12], size: [1, 0.5, 1], grindable: true, zone: 'BEGINNER' },
+  { id: 'o3', position: [-12, 0, 6], size: [2, 0.6, 2], grindable: false, zone: 'BEGINNER' },
+  { id: 'o4', position: [-14, 0, 10], size: [1, 0.5, 0.5], grindable: false, zone: 'BEGINNER' },
   // Street zone obstacles
-  { id: 'o4', position: [10, 0, 4], size: [2, 0.5, 1], grindable: true, zone: 'STREET' },
-  { id: 'o5', position: [14, 0, 4], size: [1, 0.5, 1], grindable: true, zone: 'STREET' },
-  { id: 'o6', position: [8, 0, 10], size: [2, 0.6, 2], grindable: false, zone: 'STREET' },
-  { id: 'o7', position: [16, 0, 16], size: [2, 0.6, 2], grindable: false, zone: 'STREET' },
+  { id: 'o5', position: [8, 0, 6], size: [2, 0.5, 1], grindable: true, zone: 'STREET' },
+  { id: 'o6', position: [14, 0, 10], size: [2, 0.6, 2], grindable: false, zone: 'STREET' },
+  { id: 'o7', position: [12, 0, 4], size: [2, 1, 2], grindable: false, zone: 'STREET' },
   // Bowl zone
-  { id: 'o8', position: [10, 0, -16], size: [1, 0.5, 1], grindable: true, zone: 'BOWL' },
+  { id: 'o8', position: [10, 0, -14], size: [1, 0.5, 1], grindable: true, zone: 'BOWL' },
   // Advanced zone
-  { id: 'o9', position: [-12, 0, -12], size: [2, 0.5, 1], grindable: true, zone: 'ADVANCED' },
-  { id: 'o10', position: [-8, 0, -16], size: [1, 0.5, 1], grindable: true, zone: 'ADVANCED' },
-  { id: 'o11', position: [-16, 0, -16], size: [2, 0.6, 2], grindable: false, zone: 'ADVANCED' },
+  { id: 'o9', position: [-8, 0, -10], size: [2, 0.5, 1], grindable: true, zone: 'ADVANCED' },
+  { id: 'o10', position: [-12, 0, -14], size: [2, 0.6, 2], grindable: false, zone: 'ADVANCED' },
   // Hub obstacles
-  { id: 'o12', position: [0, 0, 0], size: [1, 0.5, 1], grindable: true, zone: 'HUB' },
-  { id: 'o13', position: [-3, 0, 3], size: [2, 0.5, 1], grindable: true, zone: 'HUB' },
-  { id: 'o14', position: [3, 0, -3], size: [2, 0.5, 1], grindable: true, zone: 'HUB' },
+  { id: 'o11', position: [0, 0, 0], size: [1, 0.5, 1], grindable: true, zone: 'HUB' },
 ];
 
 // ═══════════════════════════════════════════════════════════
@@ -416,45 +348,50 @@ export interface StarData {
 
 // 30 stars distributed across zones with varying difficulty
 export const STARS: StarData[] = [
-  // BEGINNER ZONE (10 easy stars - ground level, easy access)
-  { id: 1, position: [-14, 0.8, 14], zone: 'BEGINNER', difficulty: 'easy', points: 10 },
-  { id: 2, position: [-10, 0.8, 16], zone: 'BEGINNER', difficulty: 'easy', points: 10 },
-  { id: 3, position: [-8, 0.8, 12], zone: 'BEGINNER', difficulty: 'easy', points: 10 },
-  { id: 4, position: [-16, 0.8, 8], zone: 'BEGINNER', difficulty: 'easy', points: 10 },
-  { id: 5, position: [-12, 0.8, 10], zone: 'BEGINNER', difficulty: 'easy', points: 10 },
-  { id: 6, position: [-6, 0.8, 16], zone: 'BEGINNER', difficulty: 'easy', points: 10 },
-  { id: 7, position: [-14, 1.2, 12], zone: 'BEGINNER', difficulty: 'easy', points: 10 },
-  { id: 8, position: [-10, 0.8, 8], zone: 'BEGINNER', difficulty: 'easy', points: 10 },
-  { id: 9, position: [-8, 0.8, 6], zone: 'BEGINNER', difficulty: 'easy', points: 10 },
-  { id: 10, position: [-16, 1.0, 14], zone: 'BEGINNER', difficulty: 'easy', points: 10 },
+  // BEGINNER ANCHORS
+  { id: 1, position: [-12, 0.9, 12], zone: 'BEGINNER', difficulty: 'easy', points: 10 },
+  { id: 2, position: [-11.2, 1.6, 12.8], zone: 'BEGINNER', difficulty: 'medium', points: 25 },
+  { id: 3, position: [-12.6, 2.3, 11.4], zone: 'BEGINNER', difficulty: 'hard', points: 50 },
 
-  // STREET ZONE (8 medium stars - on/near rails and ledges)
-  { id: 11, position: [10, 1.5, 14], zone: 'STREET', difficulty: 'medium', points: 25 },
-  { id: 12, position: [14, 1.8, 10], zone: 'STREET', difficulty: 'medium', points: 25 },
-  { id: 13, position: [8, 1.2, 16], zone: 'STREET', difficulty: 'medium', points: 25 },
-  { id: 14, position: [12, 1.0, 6], zone: 'STREET', difficulty: 'medium', points: 25 },
-  { id: 15, position: [16, 1.5, 8], zone: 'STREET', difficulty: 'medium', points: 25 },
-  { id: 16, position: [6, 1.2, 4], zone: 'STREET', difficulty: 'medium', points: 25 },
-  { id: 17, position: [10, 1.0, 10], zone: 'STREET', difficulty: 'medium', points: 25 },
-  { id: 18, position: [14, 1.2, 4], zone: 'STREET', difficulty: 'medium', points: 25 },
+  { id: 4, position: [-10, 0.9, 14], zone: 'BEGINNER', difficulty: 'easy', points: 10 },
+  { id: 5, position: [-9.2, 1.6, 14.6], zone: 'BEGINNER', difficulty: 'medium', points: 25 },
+  { id: 6, position: [-10.8, 2.3, 13.4], zone: 'BEGINNER', difficulty: 'hard', points: 50 },
 
-  // BOWL ZONE (6 medium/hard stars - require air/jumps)
-  { id: 19, position: [12, 2.0, -12], zone: 'BOWL', difficulty: 'medium', points: 25 },
-  { id: 20, position: [8, 2.5, -14], zone: 'BOWL', difficulty: 'hard', points: 50 },
-  { id: 21, position: [14, 2.5, -8], zone: 'BOWL', difficulty: 'hard', points: 50 },
-  { id: 22, position: [10, 1.5, -10], zone: 'BOWL', difficulty: 'medium', points: 25 },
-  { id: 23, position: [16, 2.0, -14], zone: 'BOWL', difficulty: 'hard', points: 50 },
-  { id: 24, position: [6, 1.2, -6], zone: 'BOWL', difficulty: 'medium', points: 25 },
+  { id: 7, position: [-12, 0.9, 6], zone: 'BEGINNER', difficulty: 'easy', points: 10 },
+  { id: 8, position: [-11.2, 1.6, 6.8], zone: 'BEGINNER', difficulty: 'medium', points: 25 },
+  { id: 9, position: [-12.8, 2.3, 5.4], zone: 'BEGINNER', difficulty: 'hard', points: 50 },
 
-  // ADVANCED ZONE (4 hard stars - high skill required)
-  { id: 25, position: [-10, 3.0, -14], zone: 'ADVANCED', difficulty: 'hard', points: 50 },
-  { id: 26, position: [-14, 2.5, -10], zone: 'ADVANCED', difficulty: 'hard', points: 50 },
-  { id: 27, position: [-8, 2.0, -8], zone: 'ADVANCED', difficulty: 'hard', points: 50 },
-  { id: 28, position: [-16, 2.5, -16], zone: 'ADVANCED', difficulty: 'hard', points: 50 },
+  // HUB ANCHOR
+  { id: 10, position: [0, 0.9, 0], zone: 'HUB', difficulty: 'easy', points: 10 },
+  { id: 11, position: [1.2, 1.6, 0.8], zone: 'HUB', difficulty: 'medium', points: 25 },
+  { id: 12, position: [-1.2, 2.3, -0.8], zone: 'HUB', difficulty: 'hard', points: 100 },
 
-  // HUB (2 bonus stars - central area rewards)
-  { id: 29, position: [0, 1.5, 0], zone: 'HUB', difficulty: 'easy', points: 10 },
-  { id: 30, position: [0, 3.0, 0], zone: 'HUB', difficulty: 'hard', points: 100 },
+  // STREET ANCHORS
+  { id: 13, position: [10, 0.9, 12], zone: 'STREET', difficulty: 'easy', points: 10 },
+  { id: 14, position: [10.8, 1.6, 12.6], zone: 'STREET', difficulty: 'medium', points: 25 },
+  { id: 15, position: [9.4, 2.3, 11.4], zone: 'STREET', difficulty: 'hard', points: 50 },
+
+  { id: 16, position: [12, 0.9, 4], zone: 'STREET', difficulty: 'easy', points: 10 },
+  { id: 17, position: [12.6, 1.6, 4.8], zone: 'STREET', difficulty: 'medium', points: 25 },
+  { id: 18, position: [11.4, 2.3, 3.4], zone: 'STREET', difficulty: 'hard', points: 50 },
+
+  { id: 19, position: [14, 0.9, 10], zone: 'STREET', difficulty: 'easy', points: 10 },
+  { id: 20, position: [14.6, 1.6, 10.8], zone: 'STREET', difficulty: 'medium', points: 25 },
+  { id: 21, position: [13.4, 2.3, 9.2], zone: 'STREET', difficulty: 'hard', points: 50 },
+
+  // BOWL ANCHORS
+  { id: 22, position: [6, 0.9, -12], zone: 'BOWL', difficulty: 'easy', points: 10 },
+  { id: 23, position: [6.8, 1.6, -11.2], zone: 'BOWL', difficulty: 'medium', points: 25 },
+  { id: 24, position: [5.2, 2.6, -12.8], zone: 'BOWL', difficulty: 'hard', points: 50 },
+
+  { id: 25, position: [12, 0.9, -10], zone: 'BOWL', difficulty: 'easy', points: 10 },
+  { id: 26, position: [12.6, 1.6, -9.2], zone: 'BOWL', difficulty: 'medium', points: 25 },
+  { id: 27, position: [11.2, 2.6, -10.8], zone: 'BOWL', difficulty: 'hard', points: 50 },
+
+  // ADVANCED ANCHOR
+  { id: 28, position: [-10, 0.9, -12], zone: 'ADVANCED', difficulty: 'easy', points: 10 },
+  { id: 29, position: [-9.2, 1.6, -11.2], zone: 'ADVANCED', difficulty: 'medium', points: 25 },
+  { id: 30, position: [-10.8, 2.6, -12.8], zone: 'ADVANCED', difficulty: 'hard', points: 50 },
 ];
 
 // Star collection radius (how close skater needs to be)

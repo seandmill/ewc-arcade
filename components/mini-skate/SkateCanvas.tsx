@@ -86,7 +86,7 @@ const SkateCanvas: React.FC<SkateCanvasProps> = ({
   skaterPosition,
 }) => {
   return (
-    <Canvas shadows camera={{ position: [0, 5, -8], fov: 60 }}>
+    <Canvas shadows dpr={[1, 1.5]} camera={{ position: [0, 5, -8], fov: 60 }}>
       {/* Camera following */}
       <FollowCamera />
 
@@ -96,8 +96,8 @@ const SkateCanvas: React.FC<SkateCanvasProps> = ({
         position={[10, 20, 10]}
         intensity={1.2}
         castShadow
-        shadow-mapSize-width={1024}
-        shadow-mapSize-height={1024}
+        shadow-mapSize-width={512}
+        shadow-mapSize-height={512}
       />
 
       {/* Sky */}
