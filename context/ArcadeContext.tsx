@@ -37,6 +37,9 @@ export interface SkateProgress {
   bestCombo: number;
   sessionsPlayed: number;
   favoriteCharacter: 'boy' | 'girl' | null;
+  collectedStars: number[]; // Array of collected star IDs
+  totalStarPoints: number; // Total points from stars
+  achievements: string[]; // Unlocked achievement IDs
 }
 
 // Full arcade state
@@ -75,6 +78,9 @@ const initialSkateProgress: SkateProgress = {
   bestCombo: 0,
   sessionsPlayed: 0,
   favoriteCharacter: null,
+  collectedStars: [],
+  totalStarPoints: 0,
+  achievements: [],
 };
 
 const initialState: ArcadeState = {

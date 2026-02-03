@@ -11,6 +11,8 @@ interface SkateUIProps {
   trickCount: number;
   comboCount: number;
   lastTrick: string | null;
+  starsCollected: number;
+  totalStars: number;
   onJoystickMove: (x: number, y: number, active: boolean) => void;
   onButtonPress: (button: string, pressed: boolean) => void;
   onPause: () => void;
@@ -190,6 +192,8 @@ const SkateUI: React.FC<SkateUIProps> = ({
   trickCount,
   comboCount,
   lastTrick,
+  starsCollected,
+  totalStars,
   onJoystickMove,
   onButtonPress,
   onPause,
@@ -221,7 +225,16 @@ const SkateUI: React.FC<SkateUIProps> = ({
     <div className="absolute inset-0 pointer-events-none">
       {/* Top HUD */}
       <div className="absolute top-2 left-1/2 -translate-x-1/2 pointer-events-auto">
-        <div className="flex items-center gap-4 bg-black/50 backdrop-blur-sm rounded-lg px-4 py-2">
+        <div className="flex items-center gap-3 bg-black/50 backdrop-blur-sm rounded-lg px-3 py-2">
+          {/* Stars */}
+          <div className="text-center">
+            <div className="text-yellow-400/80 text-xs">STARS</div>
+            <div className="text-yellow-400 font-bold text-lg flex items-center gap-1">
+              <span>⭐</span>
+              <span>{starsCollected}/{totalStars}</span>
+            </div>
+          </div>
+          <div className="w-px h-8 bg-white/20" />
           <div className="text-center">
             <div className="text-white/60 text-xs">TRICKS</div>
             <div className="text-white font-bold text-lg">{trickCount}</div>
@@ -229,7 +242,7 @@ const SkateUI: React.FC<SkateUIProps> = ({
           <div className="w-px h-8 bg-white/20" />
           <div className="text-center">
             <div className="text-white/60 text-xs">COMBO</div>
-            <div className="text-yellow-400 font-bold text-lg">{comboCount}x</div>
+            <div className="text-orange-400 font-bold text-lg">{comboCount}x</div>
           </div>
           <div className="w-px h-8 bg-white/20" />
           <div className="text-center">

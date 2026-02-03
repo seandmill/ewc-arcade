@@ -2,13 +2,15 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import * as THREE from 'three';
 import { useArcade } from '../../context/ArcadeContext';
 import { useSound } from '../../hooks/useSound';
 import SkateCanvas from './SkateCanvas';
 import SkateUI from './SkateUI';
 import { useSkateControls, InputState } from './useSkateControls';
 import { SkaterState } from './Skater';
+import { STARS } from './skateConstants';
 
 type GamePhase = 'menu' | 'playing' | 'paused';
 type SkateCharacter = 'boy' | 'girl';
@@ -26,6 +28,18 @@ const MiniSkateGame: React.FC = () => {
   const [trickCount, setTrickCount] = useState(0);
   const [comboCount, setComboCount] = useState(0);
   const [lastTrick, setLastTrick] = useState<string | null>(null);
+  const [sessionStars, setSessionStars] = useState<number[]>([]); // Stars collected this session
+  const [starFlash, setStarFlash] = useState<{ points: number; show: boolean }>({ points: 0, show: false });
+
+  // Skater position for star collision - use ref for performance
+  const skaterPositionRef = useRef(new THREE.Vector3(0, 0, 0));
+  const skaterPosition = useMemo(() => skaterPositionRef.current, []);
+
+  // Combine persisted and session stars for filtering
+  const allCollectedStars = useMemo(() => {
+    const combined = [...state.skateProgress.collectedStars, ...sessionStars];
+    return [...new Set(combined)]; // Remove duplicates
+  }, [state.skateProgress.collectedStars, sessionStars]);
 
   // Refs to avoid stale closures in callbacks passed to R3F components
   const comboCountRef = useRef(comboCount);
@@ -68,6 +82,9 @@ const MiniSkateGame: React.FC = () => {
   const handleSkaterUpdate = useCallback((newState: SkaterState) => {
     setSkaterState(newState);
 
+    // Update skater position ref for star collision detection
+    skaterPositionRef.current.copy(newState.position);
+
     // Reset combo when landing (grounded and was airborne)
     // Use ref to track previous grounded state to avoid stale closure
     if (newState.isGrounded && !prevGroundedRef.current) {
@@ -78,6 +95,32 @@ const MiniSkateGame: React.FC = () => {
     }
     prevGroundedRef.current = newState.isGrounded;
   }, []);
+
+  // Handle star collection
+  const handleStarCollected = useCallback((starId: number, points: number) => {
+    // Skip if already collected (either this session or previously)
+    if (sessionStars.includes(starId) || state.skateProgress.collectedStars.includes(starId)) {
+      return;
+    }
+
+    playCorrect();
+    setSessionStars((prev) => [...prev, starId]);
+    setStarFlash({ points, show: true });
+
+    // Hide flash after delay
+    setTimeout(() => {
+      setStarFlash((prev) => ({ ...prev, show: false }));
+    }, 1000);
+
+    // Update persistent progress
+    const newCollectedStars = [...state.skateProgress.collectedStars, starId];
+    const newTotalPoints = state.skateProgress.totalStarPoints + points;
+
+    updateSkateProgress({
+      collectedStars: newCollectedStars,
+      totalStarPoints: newTotalPoints,
+    });
+  }, [sessionStars, state.skateProgress.collectedStars, state.skateProgress.totalStarPoints, playCorrect, updateSkateProgress]);
 
   // Handle joystick movement from UI
   const handleJoystickMove = useCallback((x: number, y: number, active: boolean) => {
@@ -95,6 +138,8 @@ const MiniSkateGame: React.FC = () => {
     setPhase('playing');
     setTrickCount(0);
     setComboCount(0);
+    setSessionStars([]);
+    skaterPositionRef.current.set(0, 0, 0); // Reset position
     updateSkateProgress({
       sessionsPlayed: state.skateProgress.sessionsPlayed + 1,
       favoriteCharacter: character,
@@ -182,41 +227,34 @@ const MiniSkateGame: React.FC = () => {
           </button>
 
           {/* Stats */}
-          {state.skateProgress.totalTricks > 0 && (
-            <div className="mt-8 text-white/60 text-sm">
-              Total tricks: {state.skateProgress.totalTricks} | Best combo: {state.skateProgress.bestCombo}x
+          <div className="mt-8 space-y-2">
+            {/* Star progress */}
+            <div className="flex items-center justify-center gap-2 text-yellow-400">
+              <span className="text-2xl">⭐</span>
+              <span className="font-bold text-lg">
+                {state.skateProgress.collectedStars.length} / {STARS.length}
+              </span>
+              <span className="text-sm text-white/60">stars collected</span>
             </div>
-          )}
+
+            {/* Trick stats */}
+            {state.skateProgress.totalTricks > 0 && (
+              <div className="text-white/60 text-sm">
+                Total tricks: {state.skateProgress.totalTricks} | Best combo: {state.skateProgress.bestCombo}x
+              </div>
+            )}
+
+            {/* Points */}
+            {state.skateProgress.totalStarPoints > 0 && (
+              <div className="text-cyan-400 text-sm">
+                Total Points: {state.skateProgress.totalStarPoints}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     );
   }
-
-  // Paused screen overlay
-  const PauseOverlay = () => (
-    <div className="absolute inset-0 bg-black/70 flex items-center justify-center z-50">
-      <div className="bg-gray-800 rounded-2xl p-8 text-center">
-        <h2 className="text-3xl font-bold text-white mb-6">Paused</h2>
-        <div className="flex flex-col gap-3">
-          <button
-            onClick={handleResume}
-            className="px-6 py-3 bg-green-500 hover:bg-green-400 text-white font-bold rounded-lg"
-          >
-            Resume
-          </button>
-          <button
-            onClick={handleExit}
-            className="px-6 py-3 bg-gray-600 hover:bg-gray-500 text-white font-bold rounded-lg"
-          >
-            Exit to Menu
-          </button>
-        </div>
-        <div className="mt-6 text-white/60 text-sm">
-          Tricks this session: {trickCount}
-        </div>
-      </div>
-    </div>
-  );
 
   // Playing phase
   return (
@@ -227,6 +265,9 @@ const MiniSkateGame: React.FC = () => {
         input={input}
         onSkaterUpdate={handleSkaterUpdate}
         onTrickPerformed={handleTrickPerformed}
+        collectedStars={allCollectedStars}
+        onStarCollected={handleStarCollected}
+        skaterPosition={skaterPosition}
       />
 
       {/* UI Overlay */}
@@ -235,13 +276,52 @@ const MiniSkateGame: React.FC = () => {
         trickCount={trickCount}
         comboCount={comboCount}
         lastTrick={lastTrick}
+        starsCollected={allCollectedStars.length}
+        totalStars={STARS.length}
         onJoystickMove={handleJoystickMove}
         onButtonPress={handleButtonPress}
         onPause={handlePause}
       />
 
-      {/* Pause overlay */}
-      {phase === 'paused' && <PauseOverlay />}
+      {/* Star collection flash */}
+      {starFlash.show && (
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 z-40 pointer-events-none">
+          <div
+            className="text-5xl font-black text-yellow-400 animate-bounce"
+            style={{
+              textShadow: '0 0 30px rgba(255,215,0,0.9), 0 4px 8px rgba(0,0,0,0.5)',
+            }}
+          >
+            +{starFlash.points} ⭐
+          </div>
+        </div>
+      )}
+
+      {/* Pause overlay - inline JSX to avoid component recreation on re-render */}
+      {phase === 'paused' && (
+        <div className="absolute inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-2xl p-8 text-center">
+            <h2 className="text-3xl font-bold text-white mb-6">Paused</h2>
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={handleResume}
+                className="px-6 py-3 bg-green-500 hover:bg-green-400 text-white font-bold rounded-lg"
+              >
+                Resume
+              </button>
+              <button
+                onClick={handleExit}
+                className="px-6 py-3 bg-gray-600 hover:bg-gray-500 text-white font-bold rounded-lg"
+              >
+                Exit to Menu
+              </button>
+            </div>
+            <div className="mt-6 text-white/60 text-sm">
+              Tricks this session: {trickCount}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

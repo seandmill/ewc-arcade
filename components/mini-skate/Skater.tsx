@@ -6,7 +6,7 @@ import React, { useRef, useEffect, useMemo } from 'react';
 import { useGLTF, useAnimations, useTexture } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { ASSETS, PHYSICS, TRICKS } from './skateConstants';
+import { ASSETS, PHYSICS, TRICKS, PARK_SIZE, RAMP_DATA, OBSTACLE_DATA } from './skateConstants';
 import { InputState } from './useSkateControls';
 import { cameraTarget } from './SkateCanvas';
 
@@ -239,8 +239,90 @@ const Skater: React.FC<SkaterProps> = ({
     state.position.add(state.velocity.clone().multiplyScalar(delta * 60));
     state.position.y += state.verticalVelocity * delta;
 
-    // Ground collision
-    if (state.position.y <= 0 && state.verticalVelocity < 0) {
+    // Ramp collision detection - check if on a ramp and adjust Y position
+    let onRamp = false;
+    let rampBoost = 1.0;
+    for (const ramp of RAMP_DATA) {
+      const [rx, , rz] = ramp.position; // ry unused - ramps start at Y=0
+      const [sx, sy, sz] = ramp.size;
+      const halfX = sx / 2;
+      const halfZ = sz / 2;
+
+      // Check if within ramp bounds
+      if (
+        state.position.x >= rx - halfX && state.position.x <= rx + halfX &&
+        state.position.z >= rz - halfZ && state.position.z <= rz + halfZ
+      ) {
+        // Calculate ramp height based on direction and position
+        const slopeRad = (ramp.slopeAngle * Math.PI) / 180;
+        let progress = 0;
+
+        switch (ramp.direction) {
+          case 'north':
+            progress = (state.position.z - (rz - halfZ)) / sz;
+            break;
+          case 'south':
+            progress = 1 - (state.position.z - (rz - halfZ)) / sz;
+            break;
+          case 'east':
+            progress = (state.position.x - (rx - halfX)) / sx;
+            break;
+          case 'west':
+            progress = 1 - (state.position.x - (rx - halfX)) / sx;
+            break;
+        }
+
+        const rampHeight = Math.sin(progress * Math.PI / 2) * ramp.maxHeight;
+        if (state.position.y <= rampHeight + 0.1) {
+          state.position.y = rampHeight;
+          onRamp = true;
+          rampBoost = PHYSICS.RAMP_BOOST;
+          state.isGrounded = true;
+
+          // Apply upward velocity boost when going up ramp
+          if (progress > 0.5 && state.verticalVelocity >= 0) {
+            state.verticalVelocity += progress * 0.1;
+          }
+        }
+      }
+    }
+
+    // Obstacle collision detection - simple AABB for boxes
+    for (const obstacle of OBSTACLE_DATA) {
+      const [ox, , oz] = obstacle.position; // oy unused - obstacles at ground level
+      const [sx, sy, sz] = obstacle.size;
+      const halfX = sx / 2;
+      const halfZ = sz / 2;
+
+      // Check if near obstacle
+      if (
+        state.position.x >= ox - halfX - 0.3 && state.position.x <= ox + halfX + 0.3 &&
+        state.position.z >= oz - halfZ - 0.3 && state.position.z <= oz + halfZ + 0.3
+      ) {
+        // Check if on top of obstacle
+        if (state.position.y <= sy + 0.1 && state.position.y >= sy - 0.2) {
+          // On top - can grind/manual
+          state.position.y = sy;
+          state.isGrounded = true;
+          state.currentTrick = null;
+        } else if (state.position.y < sy) {
+          // Collision with side - push back
+          const dx = state.position.x - ox;
+          const dz = state.position.z - oz;
+
+          if (Math.abs(dx) > Math.abs(dz)) {
+            state.position.x = ox + Math.sign(dx) * (halfX + 0.3);
+            state.velocity.x *= -0.3; // Bounce
+          } else {
+            state.position.z = oz + Math.sign(dz) * (halfZ + 0.3);
+            state.velocity.z *= -0.3; // Bounce
+          }
+        }
+      }
+    }
+
+    // Ground collision (when not on ramp or obstacle)
+    if (!onRamp && state.position.y <= 0 && state.verticalVelocity < 0) {
       state.position.y = 0;
       state.verticalVelocity = 0;
       if (!state.isGrounded) {
@@ -250,8 +332,8 @@ const Skater: React.FC<SkaterProps> = ({
       }
     }
 
-    // Park bounds (keep within ~10 unit radius)
-    const boundSize = 9;
+    // Park bounds - expanded to 40x40 (±19 units)
+    const boundSize = PARK_SIZE.boundSize;
     state.position.x = THREE.MathUtils.clamp(state.position.x, -boundSize, boundSize);
     state.position.z = THREE.MathUtils.clamp(state.position.z, -boundSize, boundSize);
 
@@ -276,10 +358,9 @@ const Skater: React.FC<SkaterProps> = ({
     groupRef.current.position.copy(state.position);
     groupRef.current.rotation.y = state.rotation;
 
-    // DEBUG: Log every 60 frames to verify mesh position is updating
-    if (frameCountRef.current % 60 === 0) {
-      console.log('[Skater] State position:', state.position.x.toFixed(2), state.position.y.toFixed(2), state.position.z.toFixed(2),
-        'Mesh position:', groupRef.current.position.x.toFixed(2), groupRef.current.position.y.toFixed(2), groupRef.current.position.z.toFixed(2));
+    // Frame counter for development debugging (only logs in dev mode)
+    if (import.meta.env.DEV && frameCountRef.current % 300 === 0) {
+      console.log('[Skater] Position:', state.position.x.toFixed(1), state.position.y.toFixed(1), state.position.z.toFixed(1));
     }
     frameCountRef.current++;
 

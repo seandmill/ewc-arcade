@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import { InputState } from './useSkateControls';
 import Skater, { SkaterState } from './Skater';
 import Skatepark from './Skatepark';
+import Stars from './Stars';
 
 // Module-level store for camera target - avoids React/R3F reconciler issues
 // The Skater component writes to this every frame, and FollowCamera reads from it.
@@ -21,6 +22,9 @@ export const cameraTarget = {
 const FollowCamera: React.FC = () => {
   const { camera } = useThree();
   const initializedRef = useRef(false);
+  // Reusable vectors to avoid GC pressure in hot render loop
+  const desiredPositionRef = useRef(new THREE.Vector3());
+  const lookTargetRef = useRef(new THREE.Vector3());
 
   useFrame(() => {
     if (!initializedRef.current) {
@@ -38,7 +42,8 @@ const FollowCamera: React.FC = () => {
     const offsetX = -Math.sin(targetRotation) * offsetDistance;
     const offsetZ = -Math.cos(targetRotation) * offsetDistance;
 
-    const desiredPosition = new THREE.Vector3(
+    // Reuse vector refs instead of allocating new objects
+    desiredPositionRef.current.set(
       targetPosition.x + offsetX,
       targetPosition.y + offsetHeight,
       targetPosition.z + offsetZ
@@ -46,15 +51,15 @@ const FollowCamera: React.FC = () => {
 
     // Smooth interpolation - lower value = smoother but laggier
     // 0.05 reduces jitter from small position fluctuations
-    camera.position.lerp(desiredPosition, 0.06);
+    camera.position.lerp(desiredPositionRef.current, 0.06);
 
     // Look at target
-    const lookTarget = new THREE.Vector3(
+    lookTargetRef.current.set(
       targetPosition.x,
       targetPosition.y + 0.5,
       targetPosition.z
     );
-    camera.lookAt(lookTarget);
+    camera.lookAt(lookTargetRef.current);
     camera.updateProjectionMatrix();
   });
 
@@ -66,6 +71,9 @@ interface SkateCanvasProps {
   input: InputState;
   onSkaterUpdate: (state: SkaterState) => void;
   onTrickPerformed: (trickName: string) => void;
+  collectedStars: number[];
+  onStarCollected: (starId: number, points: number) => void;
+  skaterPosition: THREE.Vector3;
 }
 
 const SkateCanvas: React.FC<SkateCanvasProps> = ({
@@ -73,6 +81,9 @@ const SkateCanvas: React.FC<SkateCanvasProps> = ({
   character,
   onSkaterUpdate,
   onTrickPerformed,
+  collectedStars,
+  onStarCollected,
+  skaterPosition,
 }) => {
   return (
     <Canvas shadows camera={{ position: [0, 5, -8], fov: 60 }}>
@@ -98,6 +109,15 @@ const SkateCanvas: React.FC<SkateCanvasProps> = ({
       {/* Skatepark obstacles and floor */}
       <Suspense fallback={null}>
         <Skatepark />
+      </Suspense>
+
+      {/* Collectible stars */}
+      <Suspense fallback={null}>
+        <Stars
+          collectedIds={collectedStars}
+          onCollect={onStarCollected}
+          skaterPosition={skaterPosition}
+        />
       </Suspense>
 
       {/* Player character with physics and animations */}
